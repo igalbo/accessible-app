@@ -3,9 +3,14 @@
  * This module handles loading and running axe-core for accessibility scanning
  */
 
+import { Page } from "playwright";
+import axeCore from "axe-core";
+import { readFileSync } from "fs";
+import { join } from "path";
+
 export interface AxeViolation {
   id: string;
-  impact: 'minor' | 'moderate' | 'serious' | 'critical';
+  impact: "minor" | "moderate" | "serious" | "critical";
   description: string;
   nodes: Array<{
     target: string[];
@@ -28,112 +33,86 @@ export interface AxeResults {
 }
 
 /**
- * Gets the axe-core script content, either from CDN or fallback implementation
+ * Gets the latest axe-core version from CDN API
  */
-export async function getAxeCoreScript(): Promise<string> {
+async function getLatestAxeVersion(): Promise<string | null> {
   try {
-    // First, get the latest version URL from CDNJS API
-    const apiResponse = await fetch('https://api.cdnjs.com/libraries/axe-core');
-    if (apiResponse.ok) {
-      const apiData = await apiResponse.json();
-      const latestUrl = apiData.latest;
-      
-      // Now fetch the actual axe-core script from the latest URL
-      const scriptResponse = await fetch(latestUrl);
-      if (scriptResponse.ok) {
-        console.log(`Got axe-core from CDN: ${latestUrl}`);
-        return await scriptResponse.text();
-      }
+    const response = await fetch("https://api.cdnjs.com/libraries/axe-core");
+    if (response.ok) {
+      const data = await response.json();
+      return data.version;
     }
   } catch (error) {
-    console.warn('Failed to fetch axe-core from CDN, using fallback:', error);
+    console.warn("Failed to fetch latest axe-core version:", error);
   }
-
-  // Return fallback implementation
-  return getFallbackAxeScript();
+  return null;
 }
 
 /**
- * Fallback axe-core implementation for basic accessibility checks
+ * Gets the axe-core script from CDN
  */
-function getFallbackAxeScript(): string {
-  return `
-    // Minimal axe-core fallback for basic accessibility checks
-    window.axe = {
-      run: function(callback) {
-        // Basic accessibility checks
-        const violations = [];
-        const passes = [];
-        
-        // Check for missing alt text
-        const images = document.querySelectorAll('img:not([alt])');
-        if (images.length > 0) {
-          violations.push({
-            id: 'image-alt',
-            impact: 'critical',
-            description: 'Images must have alternate text',
-            nodes: Array.from(images).map(img => ({
-              target: [img.tagName.toLowerCase() + (img.id ? '#' + img.id : '')],
-              html: img.outerHTML.substring(0, 100)
-            }))
-          });
-        }
-        
-        // Check for missing form labels
-        const inputs = document.querySelectorAll('input:not([aria-label]):not([aria-labelledby])');
-        const unlabeledInputs = Array.from(inputs).filter(input => {
-          const labels = document.querySelectorAll('label[for="' + input.id + '"]');
-          return input.type !== 'hidden' && input.type !== 'submit' && input.type !== 'button' && labels.length === 0;
-        });
-        
-        if (unlabeledInputs.length > 0) {
-          violations.push({
-            id: 'label',
-            impact: 'critical',
-            description: 'Form elements must have labels',
-            nodes: unlabeledInputs.map(input => ({
-              target: [input.tagName.toLowerCase() + (input.id ? '#' + input.id : '')],
-              html: input.outerHTML.substring(0, 100)
-            }))
-          });
-        }
-        
-        // Check for proper heading structure
-        const headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
-        if (headings.length > 0) {
-          passes.push({
-            id: 'page-has-heading-one',
-            description: 'Page has heading structure',
-            nodes: Array.from(headings).slice(0, 5).map(h => ({
-              target: [h.tagName.toLowerCase()],
-              html: h.outerHTML.substring(0, 100)
-            }))
-          });
-        }
-        
-        callback(null, { violations, passes });
-      }
-    };
-  `;
+async function getAxeCoreScriptFromCDN(
+  version: string
+): Promise<string | null> {
+  try {
+    const url = `https://cdnjs.cloudflare.com/ajax/libs/axe-core/${version}/axe.min.js`;
+    const response = await fetch(url);
+    if (response.ok) {
+      console.log(`Downloaded axe-core v${version} from CDN`);
+      return await response.text();
+    }
+  } catch (error) {
+    console.warn(`Failed to fetch axe-core v${version} from CDN:`, error);
+  }
+  return null;
 }
 
 /**
  * Runs axe-core accessibility checks on a Playwright page
+ * Uses axe.run() directly - checks version and uses latest if needed
  */
-export async function runAxeOnPage(page: any): Promise<AxeResults> {
-  // Get and inject the axe-core script
-  const axeCoreScript = await getAxeCoreScript();
+export async function runAxeOnPage(page: Page): Promise<AxeResults> {
+  const installedVersion = axeCore.version;
+  const latestVersion = await getLatestAxeVersion();
+
+  console.log(`Installed axe-core version: ${installedVersion}`);
+  console.log(`Latest axe-core version: ${latestVersion}`);
+
+  // Determine which version to use
+  let axeCoreScript: string | null = null;
+
+  // If versions don't match, download the latest
+  if (installedVersion === latestVersion || !latestVersion) {
+    console.log("Versions match. Using installed version");
+    const axeCorePath = join(
+      process.cwd(),
+      "node_modules",
+      "axe-core",
+      "axe.min.js"
+    );
+    axeCoreScript = readFileSync(axeCorePath, "utf8");
+  } else {
+    console.log(
+      `Version mismatch. Downloading latest version: ${latestVersion}`
+    );
+    axeCoreScript = await getAxeCoreScriptFromCDN(latestVersion);
+  }
+
+  if (!axeCoreScript) {
+    throw new Error("Failed to load axe-core from any source");
+  }
+
+  console.log(axeCoreScript.length);
   await page.addScriptTag({ content: axeCoreScript });
-  
-  // Run accessibility checks
+
   const results = await page.evaluate(() => {
     return new Promise((resolve, reject) => {
       // @ts-ignore - axe is injected globally
-      if (typeof axe === 'undefined') {
-        reject(new Error('axe-core not loaded'));
+      if (typeof axe === "undefined") {
+        reject(new Error("axe-core not loaded"));
         return;
       }
-      
+
       // @ts-ignore - axe is injected globally
       axe.run((err: any, results: any) => {
         if (err) {
@@ -144,33 +123,44 @@ export async function runAxeOnPage(page: any): Promise<AxeResults> {
       });
     });
   });
-  
+
   return {
     violations: (results as any).violations || [],
-    passes: (results as any).passes || []
+    passes: (results as any).passes || [],
   };
 }
 
 /**
  * Calculates accessibility score based on violations and passes
  */
-export function calculateAccessibilityScore(violations: AxeViolation[], passes: AxePass[]): number {
+export function calculateAccessibilityScore(
+  violations: AxeViolation[],
+  passes: AxePass[]
+): number {
   if (!violations || !passes) return 0;
-  
+
   // Simple scoring algorithm
   const totalChecks = violations.length + passes.length;
   if (totalChecks === 0) return 100;
-  
+
   // Weight violations by impact
   const weightedViolations = violations.reduce((sum, violation) => {
-    const weight = violation.impact === 'critical' ? 4 : 
-                   violation.impact === 'serious' ? 3 :
-                   violation.impact === 'moderate' ? 2 : 1;
+    const weight =
+      violation.impact === "critical"
+        ? 4
+        : violation.impact === "serious"
+        ? 3
+        : violation.impact === "moderate"
+        ? 2
+        : 1;
     return sum + (violation.nodes?.length || 1) * weight;
   }, 0);
-  
+
   const maxPossibleScore = totalChecks * 4; // Assuming all could be critical
-  const score = Math.max(0, Math.round(100 - (weightedViolations / maxPossibleScore) * 100));
-  
+  const score = Math.max(
+    0,
+    Math.round(100 - (weightedViolations / maxPossibleScore) * 100)
+  );
+
   return Math.min(100, score);
 }
