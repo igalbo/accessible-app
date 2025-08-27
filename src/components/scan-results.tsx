@@ -269,7 +269,7 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
                               {nodeCount} element(s) affected
                             </button>
                             {isExpanded && violation.nodes && (
-                              <div className="mt-2 pl-4 border-l-2 border-muted space-y-1">
+                              <div className="mt-2 pl-4 border-l-2 border-muted space-y-3">
                                 {violation.nodes
                                   .slice(0, 5)
                                   .map((node: any, nodeIndex: number) => (
@@ -282,6 +282,19 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
                                       {node.failureSummary && (
                                         <div className="text-muted-foreground dark:text-gray-400 mt-1">
                                           {node.failureSummary}
+                                        </div>
+                                      )}
+                                      {node.screenshot && (
+                                        <div className="mt-2">
+                                          <div className="text-muted-foreground dark:text-gray-400 mb-1">
+                                            Element Screenshot:
+                                          </div>
+                                          <img
+                                            src={node.screenshot}
+                                            alt={`Screenshot of element with ${violation.id} violation`}
+                                            className="max-w-full h-auto border border-muted rounded shadow-sm"
+                                            style={{ maxHeight: "200px" }}
+                                          />
                                         </div>
                                       )}
                                     </div>

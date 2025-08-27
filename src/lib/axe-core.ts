@@ -15,6 +15,7 @@ export interface AxeViolation {
   nodes: Array<{
     target: string[];
     html: string;
+    screenshot?: string; // Path to screenshot file
   }>;
 }
 
@@ -68,10 +69,78 @@ async function getAxeCoreScriptFromCDN(
 }
 
 /**
+ * Captures screenshots of elements with violations
+ */
+async function captureViolationScreenshots(
+  page: Page,
+  violations: AxeViolation[],
+  scanId: string
+): Promise<AxeViolation[]> {
+  const screenshotDir = join(process.cwd(), "public", "screenshots");
+  const capturedElements = new Set<string>(); // Track elements to avoid duplicates
+
+  const violationsWithScreenshots = await Promise.all(
+    violations.map(async (violation) => {
+      const nodesWithScreenshots = await Promise.all(
+        violation.nodes.map(async (node) => {
+          // Create a unique identifier for the element to avoid duplicates
+          const elementId = node.target.join(",");
+
+          if (capturedElements.has(elementId)) {
+            // Element already captured, skip screenshot but still include the node
+            return node;
+          }
+
+          try {
+            // Try to find and screenshot the element
+            const element = await page.locator(node.target[0]).first();
+
+            if (await element.isVisible()) {
+              const screenshotFilename = `${scanId}-${Date.now()}-${Math.random()
+                .toString(36)
+                .substr(2, 9)}.png`;
+              const screenshotPath = join(screenshotDir, screenshotFilename);
+
+              // Take screenshot of the element
+              await element.screenshot({ path: screenshotPath });
+
+              // Mark this element as captured
+              capturedElements.add(elementId);
+
+              return {
+                ...node,
+                screenshot: `/screenshots/${screenshotFilename}`,
+              };
+            }
+          } catch (error) {
+            console.warn(
+              `Failed to screenshot element ${node.target[0]}:`,
+              error
+            );
+          }
+
+          return node;
+        })
+      );
+
+      return {
+        ...violation,
+        nodes: nodesWithScreenshots,
+      };
+    })
+  );
+
+  return violationsWithScreenshots;
+}
+
+/**
  * Runs axe-core accessibility checks on a Playwright page
  * Uses axe.run() directly - checks version and uses latest if needed
  */
-export async function runAxeOnPage(page: Page): Promise<AxeResults> {
+export async function runAxeOnPage(
+  page: Page,
+  scanId?: string
+): Promise<AxeResults> {
   const installedVersion = axeCore.version;
   const latestVersion = await getLatestAxeVersion();
 
@@ -102,7 +171,6 @@ export async function runAxeOnPage(page: Page): Promise<AxeResults> {
     throw new Error("Failed to load axe-core from any source");
   }
 
-  console.log(axeCoreScript.length);
   await page.addScriptTag({ content: axeCoreScript });
 
   const results = await page.evaluate(() => {
@@ -124,9 +192,19 @@ export async function runAxeOnPage(page: Page): Promise<AxeResults> {
     });
   });
 
+  let violations = (results as any).violations || [];
+  const passes = (results as any).passes || [];
+
+  // Capture screenshots if enabled via environment variable, scanId is provided, and there are violations
+  const screenshotsEnabled = process.env.ENABLE_SCREENSHOTS === "true";
+  if (screenshotsEnabled && scanId && violations.length > 0) {
+    console.log(`Capturing screenshots for ${violations.length} violations...`);
+    violations = await captureViolationScreenshots(page, violations, scanId);
+  }
+
   return {
-    violations: (results as any).violations || [],
-    passes: (results as any).passes || [],
+    violations,
+    passes,
   };
 }
 

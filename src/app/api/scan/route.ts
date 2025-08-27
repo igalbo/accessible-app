@@ -115,7 +115,7 @@ async function performScan(scanId: string, url: string) {
     await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
 
     // Run accessibility checks using the extracted axe-core functionality
-    const { violations, passes } = await runAxeOnPage(page);
+    const { violations, passes } = await runAxeOnPage(page, scanId);
 
     // Calculate score
     const score = calculateAccessibilityScore(violations, passes);
