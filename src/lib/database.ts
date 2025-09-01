@@ -201,6 +201,42 @@ export class DatabaseService {
     }
   }
 
+  // Find recent completed scan for a URL (within specified minutes)
+  static async findRecentScan(
+    url: string,
+    withinMinutes: number = 15
+  ): Promise<ScanResult | null> {
+    if (!supabaseAdmin) {
+      throw new Error(
+        "Supabase admin client not available. Check SUPABASE_SERVICE_ROLE_KEY."
+      );
+    }
+
+    // Calculate the cutoff time
+    const cutoffTime = new Date(Date.now() - withinMinutes * 60 * 1000);
+
+    const { data, error } = await supabaseAdmin
+      .from("scans")
+      .select("*")
+      .eq("url", url)
+      .eq("status", "completed")
+      .gte("completed_at", cutoffTime.toISOString())
+      .order("completed_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error) {
+      if (error.code === "PGRST116") {
+        // No rows returned
+        return null;
+      }
+      console.error("Error finding recent scan:", error);
+      throw new Error(`Failed to find recent scan: ${error.message}`);
+    }
+
+    return mapScanRowToResult(data);
+  }
+
   // Get scan statistics
   static async getScanStats(): Promise<{
     total: number;

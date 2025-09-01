@@ -250,9 +250,16 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
             <Shield className="h-6 w-6" />
             Accessibility Scan Results
           </CardTitle>
-          <CardDescription className="flex items-center justify-center gap-2">
-            <ExternalLink className="h-4 w-4" />
-            {result.url}
+          <CardDescription className="flex flex-col items-center justify-center gap-2">
+            <div className="flex items-center gap-2">
+              <ExternalLink className="h-4 w-4" />
+              {result.url}
+            </div>
+            {result.completedAt && (
+              <div className="text-xs text-muted-foreground">
+                Last scanned: {new Date(result.completedAt).toLocaleString()}
+              </div>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent className="text-center">
