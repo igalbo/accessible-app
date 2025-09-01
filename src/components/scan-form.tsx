@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,6 +19,7 @@ interface ScanFormProps {
 }
 
 export function ScanForm({ onScanStart }: ScanFormProps) {
+  const router = useRouter();
   const [url, setUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -42,7 +44,10 @@ export function ScanForm({ onScanStart }: ScanFormProps) {
         throw new Error(data.error || "Failed to start scan");
       }
 
-      // Notify parent component about scan start
+      // Redirect to the scan results page
+      router.push(`/scans/${data.scanId}`);
+
+      // Also notify parent component if callback provided (for backward compatibility)
       if (onScanStart) {
         onScanStart(data.scanId);
       }

@@ -2,52 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { chromium } from "playwright";
 import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
-import fs from "fs/promises";
-import path from "path";
 import { runAxeOnPage, calculateAccessibilityScore } from "@/lib/axe-core";
+import { DatabaseService, ScanResult } from "@/lib/database";
 
 const scanRequestSchema = z.object({
   url: z.string().url("Please enter a valid URL"),
 });
-
-interface ScanResult {
-  id: string;
-  url: string;
-  status: "pending" | "completed" | "failed";
-  score?: number;
-  violations?: any[];
-  passes?: any[];
-  createdAt: Date;
-  completedAt?: Date;
-  error?: string;
-}
-
-// Simple file-based storage for now
-const SCANS_DIR = path.join(process.cwd(), "data", "scans");
-
-async function ensureScansDir() {
-  try {
-    await fs.mkdir(SCANS_DIR, { recursive: true });
-  } catch (error) {
-    // Directory might already exist
-  }
-}
-
-async function saveScanResult(scanResult: ScanResult) {
-  await ensureScansDir();
-  const filePath = path.join(SCANS_DIR, `${scanResult.id}.json`);
-  await fs.writeFile(filePath, JSON.stringify(scanResult, null, 2));
-}
-
-async function loadScanResult(id: string): Promise<ScanResult | null> {
-  try {
-    const filePath = path.join(SCANS_DIR, `${id}.json`);
-    const data = await fs.readFile(filePath, "utf-8");
-    return JSON.parse(data);
-  } catch (error) {
-    return null;
-  }
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -62,8 +22,8 @@ export async function POST(request: NextRequest) {
       createdAt: new Date(),
     };
 
-    // Save initial scan result
-    await saveScanResult(scanResult);
+    // Save initial scan result to database
+    await DatabaseService.createScan(scanResult);
 
     // Start scanning in background (don't await)
     performScan(scanId, url).catch(console.error);
@@ -121,32 +81,22 @@ async function performScan(scanId: string, url: string) {
     const score = calculateAccessibilityScore(violations, passes);
 
     // Update scan result
-    const scanResult: ScanResult = {
-      id: scanId,
-      url,
+    await DatabaseService.updateScan(scanId, {
       status: "completed",
       score,
       violations,
       passes,
-      createdAt: new Date(),
       completedAt: new Date(),
-    };
-
-    await saveScanResult(scanResult);
+    });
   } catch (error) {
     console.error("Scan error:", error);
 
     // Save error result
-    const scanResult: ScanResult = {
-      id: scanId,
-      url,
+    await DatabaseService.updateScan(scanId, {
       status: "failed",
-      createdAt: new Date(),
       completedAt: new Date(),
       error: error instanceof Error ? error.message : "Unknown error occurred",
-    };
-
-    await saveScanResult(scanResult);
+    });
   } finally {
     if (browser) {
       await browser.close();
@@ -166,13 +116,20 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const scanResult = await loadScanResult(scanId);
+    const scanResult = await DatabaseService.getScan(scanId);
 
     if (!scanResult) {
       return NextResponse.json({ error: "Scan not found" }, { status: 404 });
     }
 
-    return NextResponse.json(scanResult);
+    // Convert Date objects to strings for JSON serialization
+    const responseData = {
+      ...scanResult,
+      createdAt: scanResult.createdAt.toISOString(),
+      completedAt: scanResult.completedAt?.toISOString() || null,
+    };
+
+    return NextResponse.json(responseData);
   } catch (error) {
     console.error("Get scan error:", error);
     return NextResponse.json(

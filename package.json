@@ -12,6 +12,7 @@
     "@axe-core/playwright": "^4.10.2",
     "@radix-ui/react-label": "^2.1.7",
     "@radix-ui/react-slot": "^1.2.3",
+    "@supabase/supabase-js": "^2.56.1",
     "@types/uuid": "^10.0.0",
     "axe-core": "^4.10.3",
     "axe-playwright": "^2.1.0",

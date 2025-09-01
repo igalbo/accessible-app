@@ -21,6 +21,7 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 interface ScanResult {
   id: string;
@@ -58,6 +59,9 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
   };
 
   useEffect(() => {
+    let pollInterval: NodeJS.Timeout;
+    let isSubscribed = true;
+
     const fetchResult = async () => {
       try {
         const response = await fetch(`/api/scan?id=${scanId}`);
@@ -67,22 +71,103 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
           throw new Error(data.error || "Failed to fetch scan result");
         }
 
-        setResult(data);
+        if (isSubscribed) {
+          setResult(data);
 
-        // If still pending, poll again
-        if (data.status === "pending") {
-          setTimeout(fetchResult, 2000);
-        } else {
-          setLoading(false);
+          // If completed or failed, stop loading and polling
+          if (data.status === "completed" || data.status === "failed") {
+            setLoading(false);
+            if (pollInterval) {
+              clearInterval(pollInterval);
+            }
+          }
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "An error occurred");
-        setLoading(false);
+        if (isSubscribed) {
+          setError(err instanceof Error ? err.message : "An error occurred");
+          setLoading(false);
+        }
       }
     };
 
+    // Initial fetch
     fetchResult();
-  }, [scanId]);
+
+    // Set up polling as fallback (every 2 seconds)
+    pollInterval = setInterval(() => {
+      if (isSubscribed && loading) {
+        fetchResult();
+      }
+    }, 2000);
+
+    // Try to set up real-time subscription (optional enhancement)
+    let channel: any = null;
+    try {
+      channel = supabase
+        .channel(`scan-${scanId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "scans",
+            filter: `id=eq.${scanId}`,
+          },
+          (payload) => {
+            console.log("Real-time scan update:", payload);
+
+            if (isSubscribed) {
+              // Convert the database row to our expected format
+              const updatedScan = {
+                id: payload.new.id,
+                url: payload.new.url,
+                status: payload.new.status,
+                score: payload.new.score,
+                violations: payload.new.result_json?.violations,
+                passes: payload.new.result_json?.passes,
+                createdAt: payload.new.created_at,
+                completedAt: payload.new.completed_at,
+                error: payload.new.error,
+              };
+
+              setResult(updatedScan);
+
+              // Stop loading when scan is complete
+              if (
+                updatedScan.status === "completed" ||
+                updatedScan.status === "failed"
+              ) {
+                setLoading(false);
+                if (pollInterval) {
+                  clearInterval(pollInterval);
+                }
+              }
+            }
+          }
+        )
+        .subscribe();
+    } catch (realtimeError) {
+      console.warn(
+        "Real-time subscription failed, using polling only:",
+        realtimeError
+      );
+    }
+
+    // Cleanup function
+    return () => {
+      isSubscribed = false;
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch (error) {
+          console.warn("Error removing channel:", error);
+        }
+      }
+    };
+  }, [scanId, loading]);
 
   const getScoreColor = (score: number) => {
     if (score >= 90) return "text-green-600";
@@ -190,7 +275,10 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
           <div className="grid grid-cols-2 gap-4 text-center">
             <div>
               <div className="text-2xl font-semibold text-red-600">
-                {violations.length}
+                {violations.reduce(
+                  (total, violation) => total + (violation.nodes?.length || 0),
+                  0
+                )}
               </div>
               <div className="text-sm text-muted-foreground">Issues Found</div>
             </div>
