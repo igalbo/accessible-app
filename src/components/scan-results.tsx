@@ -21,7 +21,7 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/utils/supabase/client";
 
 interface ScanResult {
   id: string;
@@ -61,21 +61,43 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
   useEffect(() => {
     let pollInterval: NodeJS.Timeout;
     let isSubscribed = true;
+    const supabase = createClient();
 
     const fetchResult = async () => {
       try {
-        const response = await fetch(`/api/scan?id=${scanId}`);
-        const data = await response.json();
+        const { data: scanData, error } = await supabase
+          .from("scans")
+          .select(
+            "id, url, status, score, result_json, created_at, completed_at, error"
+          )
+          .eq("id", scanId)
+          .single();
 
-        if (!response.ok) {
-          throw new Error(data.error || "Failed to fetch scan result");
+        if (error) {
+          if (error.code === "PGRST116") {
+            throw new Error("Scan not found");
+          }
+          throw new Error(error.message || "Failed to fetch scan result");
         }
 
         if (isSubscribed) {
-          setResult(data);
+          // Convert database row to our expected format
+          const result = {
+            id: scanData.id,
+            url: scanData.url,
+            status: scanData.status,
+            score: scanData.score,
+            violations: scanData.result_json?.violations,
+            passes: scanData.result_json?.passes,
+            createdAt: scanData.created_at,
+            completedAt: scanData.completed_at,
+            error: scanData.error,
+          };
+
+          setResult(result);
 
           // If completed or failed, stop loading and polling
-          if (data.status === "completed" || data.status === "failed") {
+          if (result.status === "completed" || result.status === "failed") {
             setLoading(false);
             if (pollInterval) {
               clearInterval(pollInterval);
@@ -100,7 +122,7 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
       }
     }, 2000);
 
-    // Try to set up real-time subscription (optional enhancement)
+    // Set up real-time subscription
     let channel: any = null;
     try {
       channel = supabase
@@ -296,6 +318,28 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
               <div className="text-sm text-muted-foreground">Tests Passed</div>
             </div>
           </div>
+
+          {violations.length > 0 && (
+            <div className="mt-6 text-center">
+              <Button
+                asChild
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <a
+                  href="https://www.accessibe.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center"
+                >
+                  Resolve Issues
+                  <ExternalLink className="ml-2 h-4 w-4" />
+                </a>
+              </Button>
+              <p className="text-xs text-muted-foreground mt-2">
+                * We may earn a commission from purchases made through this link
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 

@@ -10,9 +10,6 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
-// Client for browser/client-side operations
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
 // Admin client for server-side operations (bypasses RLS)
 export const supabaseAdmin = (() => {
   if (!supabaseServiceRoleKey) {
@@ -34,29 +31,6 @@ export const supabaseAdmin = (() => {
 export interface Database {
   public: {
     Tables: {
-      users: {
-        Row: {
-          id: string;
-          email: string;
-          stripe_customer_id: string | null;
-          plan: "free" | "pro";
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          email: string;
-          stripe_customer_id?: string | null;
-          plan?: "free" | "pro";
-          created_at?: string;
-        };
-        Update: {
-          id?: string;
-          email?: string;
-          stripe_customer_id?: string | null;
-          plan?: "free" | "pro";
-          created_at?: string;
-        };
-      };
       scans: {
         Row: {
           id: string;
@@ -99,7 +73,3 @@ export interface Database {
 export type ScanRow = Database["public"]["Tables"]["scans"]["Row"];
 export type ScanInsert = Database["public"]["Tables"]["scans"]["Insert"];
 export type ScanUpdate = Database["public"]["Tables"]["scans"]["Update"];
-
-export type UserRow = Database["public"]["Tables"]["users"]["Row"];
-export type UserInsert = Database["public"]["Tables"]["users"]["Insert"];
-export type UserUpdate = Database["public"]["Tables"]["users"]["Update"];

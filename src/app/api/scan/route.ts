@@ -4,38 +4,11 @@ import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
 import { runAxeOnPage, calculateAccessibilityScore } from "@/lib/axe-core";
 import { DatabaseService, ScanResult } from "@/lib/database";
+import { createClient } from "@/utils/supabase/server";
 
 const scanRequestSchema = z.object({
   url: z.string().url("Please enter a valid URL"),
 });
-
-// Public API response interface - excludes sensitive fields like userId
-interface PublicScanResponse {
-  id: string;
-  url: string;
-  status: "pending" | "completed" | "failed";
-  score: number; // Always present, defaults to 0 if undefined
-  violations?: unknown[];
-  passes?: unknown[];
-  createdAt: string;
-  completedAt?: string | null;
-  error?: string;
-}
-
-// Sanitize scan result for public API response
-function createPublicScanResponse(scanResult: ScanResult): PublicScanResponse {
-  return {
-    id: scanResult.id,
-    url: scanResult.url,
-    status: scanResult.status,
-    score: scanResult.score ?? 0, // Ensure score is always present, default to 0 if undefined
-    violations: scanResult.violations,
-    passes: scanResult.passes,
-    createdAt: scanResult.createdAt.toISOString(),
-    completedAt: scanResult.completedAt?.toISOString() || null,
-    error: scanResult.error,
-  };
-}
 
 /**
  * Navigate to a page with fallback strategy to handle timeout issues
@@ -85,17 +58,48 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { url } = scanRequestSchema.parse(body);
 
-    // Check for recent scan within 15 minutes
-    const recentScan = await DatabaseService.findRecentScan(url, 15);
+    // Check if user is authenticated
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    if (recentScan) {
-      // Return the cached result
+    // Check for recent scan within 15 minutes that the current user can access
+    // Use the user's authenticated client to respect RLS policies
+    const cutoffTime = new Date(Date.now() - 15 * 60 * 1000);
+
+    const { data: recentScanData, error: recentScanError } = await supabase
+      .from("scans")
+      .select(
+        "id, url, status, score, result_json, created_at, completed_at, error"
+      )
+      .eq("url", url)
+      .eq("status", "completed")
+      .gte("completed_at", cutoffTime.toISOString())
+      .order("completed_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (recentScanData && !recentScanError) {
+      // Found a recent scan that the user can access
+      const recentScan = {
+        id: recentScanData.id,
+        url: recentScanData.url,
+        status: recentScanData.status,
+        score: recentScanData.score ?? 0,
+        violations: recentScanData.result_json?.violations,
+        passes: recentScanData.result_json?.passes,
+        createdAt: recentScanData.created_at,
+        completedAt: recentScanData.completed_at,
+        error: recentScanData.error,
+      };
+
       return NextResponse.json({
         scanId: recentScan.id,
         status: "completed",
         message: "Returning cached scan result",
         cached: true,
-        lastScanned: recentScan.completedAt?.toISOString(),
+        lastScanned: recentScan.completedAt,
       });
     }
 
@@ -105,6 +109,7 @@ export async function POST(request: NextRequest) {
       url,
       status: "pending",
       createdAt: new Date(),
+      userId: user?.id || null, // Associate with user if authenticated
     };
 
     // Save initial scan result to database
@@ -191,36 +196,5 @@ async function performScan(scanId: string, url: string) {
     if (browser) {
       await browser.close();
     }
-  }
-}
-
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const scanId = searchParams.get("id");
-
-    if (!scanId) {
-      return NextResponse.json(
-        { error: "Scan ID is required" },
-        { status: 400 }
-      );
-    }
-
-    const scanResult = await DatabaseService.getScan(scanId);
-
-    if (!scanResult) {
-      return NextResponse.json({ error: "Scan not found" }, { status: 404 });
-    }
-
-    // Return sanitized response without sensitive fields like userId
-    const publicResponse = createPublicScanResponse(scanResult);
-
-    return NextResponse.json(publicResponse);
-  } catch (error) {
-    console.error("Get scan error:", error);
-    return NextResponse.json(
-      { error: "Failed to retrieve scan" },
-      { status: 500 }
-    );
   }
 }
