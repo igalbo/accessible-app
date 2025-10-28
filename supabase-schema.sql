@@ -67,4 +67,37 @@ CREATE TRIGGER trigger_set_completed_at
     FOR EACH ROW
     EXECUTE FUNCTION set_completed_at();
 
+-- Create email_subscribers table for non-logged users who request reports
+CREATE TABLE email_subscribers (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email TEXT NOT NULL,
+    scan_id UUID REFERENCES scans(id) ON DELETE CASCADE,
+    source TEXT DEFAULT 'report_download',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(email, scan_id)
+);
+
+-- Create indexes for better performance
+CREATE INDEX idx_email_subscribers_email ON email_subscribers(email);
+CREATE INDEX idx_email_subscribers_scan_id ON email_subscribers(scan_id);
+CREATE INDEX idx_email_subscribers_created_at ON email_subscribers(created_at DESC);
+
+-- Enable Row Level Security (RLS)
+ALTER TABLE email_subscribers ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies for email_subscribers table
+-- Allow anyone to insert email subscriptions (for report requests)
+CREATE POLICY "Anyone can insert email subscriptions" ON email_subscribers
+    FOR INSERT WITH CHECK (true);
+
+-- Allow users to read their own email subscriptions if they're logged in and own the scan
+CREATE POLICY "Users can read own scan email subscriptions" ON email_subscribers
+    FOR SELECT USING (
+        EXISTS (
+            SELECT 1 FROM scans 
+            WHERE scans.id = email_subscribers.scan_id 
+            AND scans.user_id = auth.uid()
+        )
+    );
+
 -- Sample data removed since we're using auth.users directly

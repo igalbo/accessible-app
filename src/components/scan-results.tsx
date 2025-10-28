@@ -20,8 +20,11 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronRight,
+  Download,
+  FileText,
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
+import { EmailCaptureModal } from "@/components/email-capture-modal";
 
 interface ScanResult {
   id: string;
@@ -47,6 +50,9 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
   const [expandedViolations, setExpandedViolations] = useState<Set<string>>(
     new Set()
   );
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [user, setUser] = useState<any>(null);
 
   const toggleViolationExpansion = (violationKey: string) => {
     const newExpanded = new Set(expandedViolations);
@@ -62,6 +68,23 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
     let pollInterval: NodeJS.Timeout;
     let isSubscribed = true;
     const supabase = createClient();
+
+    // Get user authentication state
+    const getUser = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      setUser(user);
+    };
+
+    getUser();
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      setUser(session?.user ?? null);
+    });
 
     const fetchResult = async () => {
       try {
@@ -178,6 +201,7 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
     // Cleanup function
     return () => {
       isSubscribed = false;
+      subscription.unsubscribe();
       if (pollInterval) {
         clearInterval(pollInterval);
       }
@@ -190,6 +214,48 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
       }
     };
   }, [scanId, loading]);
+
+  const handleDownloadReport = async () => {
+    if (!result) return;
+
+    setIsDownloading(true);
+    try {
+      const response = await fetch(`/api/reports/download?scanId=${scanId}`);
+
+      if (!response.ok) {
+        throw new Error("Failed to download report");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.style.display = "none";
+      a.href = url;
+      a.download = `accessibility-report-${result.url.replace(
+        /[^a-zA-Z0-9.-]/g,
+        "_"
+      )}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error("Download failed:", error);
+      alert("Failed to download report. Please try again.");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const handleGetReport = () => {
+    if (user) {
+      // User is logged in - direct download
+      handleDownloadReport();
+    } else {
+      // User is not logged in - show email modal
+      setIsEmailModalOpen(true);
+    }
+  };
 
   const getScoreColor = (score: number) => {
     if (score >= 90) return "text-green-600";
@@ -468,17 +534,44 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
             <Button onClick={onNewScan} variant="outline">
               Scan Another Website
             </Button>
-            <Button>
-              Get Detailed Report
-              <ExternalLink className="ml-2 h-4 w-4" />
+            <Button
+              onClick={handleGetReport}
+              disabled={isDownloading}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              {isDownloading ? (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  Generating...
+                </>
+              ) : user ? (
+                <>
+                  <Download className="mr-2 h-4 w-4" />
+                  Download PDF Report
+                </>
+              ) : (
+                <>
+                  <FileText className="mr-2 h-4 w-4" />
+                  Get Detailed Report
+                </>
+              )}
             </Button>
           </div>
           <p className="text-center text-sm text-muted-foreground mt-4">
-            Want more detailed reports and fix suggestions?{" "}
-            <span className="text-primary font-medium">Upgrade to Pro</span>
+            {user
+              ? "Professional PDF report with detailed analysis and recommendations"
+              : "Enter your email to receive a comprehensive PDF report"}
           </p>
         </CardContent>
       </Card>
+
+      {/* Email Capture Modal */}
+      <EmailCaptureModal
+        isOpen={isEmailModalOpen}
+        onClose={() => setIsEmailModalOpen(false)}
+        scanId={scanId}
+        scanUrl={result.url}
+      />
     </div>
   );
 }

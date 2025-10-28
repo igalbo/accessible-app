@@ -13,6 +13,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Loader2, Globe, AlertCircle } from "lucide-react";
+import { normalizeUrl, isValidUrl } from "@/lib/utils";
 
 interface ScanFormProps {
   onScanStart?: (scanId: string) => void;
@@ -30,12 +31,15 @@ export function ScanForm({ onScanStart }: ScanFormProps) {
     setIsLoading(true);
 
     try {
+      // Normalize the URL before sending
+      const normalizedUrl = normalizeUrl(url);
+
       const response = await fetch("/api/scan", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url: normalizedUrl }),
       });
 
       const data = await response.json();
@@ -58,15 +62,6 @@ export function ScanForm({ onScanStart }: ScanFormProps) {
     }
   };
 
-  const isValidUrl = (url: string) => {
-    try {
-      new URL(url);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
   return (
     <Card className="w-full max-w-2xl mx-auto">
       <CardHeader className="text-center">
@@ -85,8 +80,8 @@ export function ScanForm({ onScanStart }: ScanFormProps) {
             <Label htmlFor="url">Website URL</Label>
             <Input
               id="url"
-              type="url"
-              placeholder="https://example.com"
+              type="text"
+              placeholder="example.com or https://example.com"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               disabled={isLoading}
