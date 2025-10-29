@@ -2,11 +2,12 @@
   "name": "accessibility-saas",
   "version": "0.1.0",
   "private": true,
-  "scripts": {
+ "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "postinstall": "playwright install --with-deps chromium"
   },
   "dependencies": {
     "@axe-core/playwright": "^4.10.2",
