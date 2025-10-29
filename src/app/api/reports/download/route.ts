@@ -77,8 +77,11 @@ export async function GET(request: NextRequest) {
     const pdfBuffer = await generatePDF({ scanId });
     const filename = generatePDFFilename(scanData.url, scanId);
 
+    // Convert Buffer to Uint8Array for NextResponse compatibility
+    const uint8Array = new Uint8Array(pdfBuffer);
+
     // Return PDF as download
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(uint8Array, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
