@@ -13,45 +13,31 @@ const scanRequestSchema = z.object({
 });
 
 /**
- * Navigate to a page with fallback strategy to handle timeout issues
- * First tries networkidle0, then falls back to domcontentloaded
+ * Navigate to a page using domcontentloaded strategy
+ * More reliable than networkidle for most websites
  */
 async function navigateWithFallback(page: Page, url: string): Promise<void> {
   console.log(`Attempting to navigate to: ${url}`);
 
   try {
-    // First attempt: networkidle0 (fastest when it works)
-    console.log("Trying networkidle0 strategy...");
+    // Use domcontentloaded (more reliable and faster)
+    console.log("Loading page with domcontentloaded strategy...");
     await page.goto(url, {
-      waitUntil: "networkidle0",
-      timeout: 30000,
+      waitUntil: "domcontentloaded",
+      timeout: 45000,
     });
-    console.log("Successfully loaded with networkidle0");
+    console.log("Successfully loaded with domcontentloaded");
+
+    // Give a bit more time for dynamic content to load
+    await new Promise((resolve) => setTimeout(resolve, 2000));
     return;
-  } catch {
-    console.log("Networkidle0 failed, trying domcontentloaded fallback...");
-
-    try {
-      // Second attempt: domcontentloaded (more reliable)
-      await page.goto(url, {
-        waitUntil: "domcontentloaded",
-        timeout: 45000,
-      });
-      console.log("Successfully loaded with domcontentloaded");
-
-      // Give a bit more time for dynamic content to load
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      return;
-    } catch (fallbackError) {
-      console.error("Both navigation strategies failed:", fallbackError);
-      throw new Error(
-        `Failed to load page: ${
-          fallbackError instanceof Error
-            ? fallbackError.message
-            : "Unknown error"
-        }`
-      );
-    }
+  } catch (error) {
+    console.error("Navigation failed:", error);
+    throw new Error(
+      `Failed to load page: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`
+    );
   }
 }
 
