@@ -539,9 +539,12 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
                                     </div>
                                   ))}
                                 {!user && violation.nodes.length > 5 && (
-                                  <div className="text-xs text-muted-foreground dark:text-gray-400">
+                                  <button
+                                    onClick={() => setIsEmailModalOpen(true)}
+                                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                                  >
                                     +{violation.nodes.length - 5} more elements
-                                  </div>
+                                  </button>
                                 )}
                               </div>
                             )}
@@ -549,9 +552,12 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
                         );
                       })}
                     {!user && impactViolations.length > 3 && (
-                      <div className="text-sm text-muted-foreground">
+                      <button
+                        onClick={() => setIsEmailModalOpen(true)}
+                        className="text-sm text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                      >
                         +{impactViolations.length - 3} more issues
-                      </div>
+                      </button>
                     )}
                   </div>
                 </div>
@@ -592,9 +598,7 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
             </Button>
           </div>
           <p className="text-center text-sm text-muted-foreground mt-4">
-            {user
-              ? "Professional PDF report with detailed analysis and recommendations"
-              : "Enter your email to receive a comprehensive PDF report"}
+            Professional PDF report with detailed analysis and recommendations
           </p>
         </CardContent>
       </Card>

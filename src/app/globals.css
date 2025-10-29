@@ -201,4 +201,23 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+  
+  /* Ensure cursor changes to pointer for interactive elements */
+  button,
+  a,
+  [role="button"],
+  [type="button"],
+  [type="submit"],
+  [type="reset"],
+  input[type="checkbox"],
+  input[type="radio"],
+  select,
+  label {
+    cursor: pointer;
+  }
+  
+  button:disabled,
+  button[disabled] {
+    cursor: not-allowed;
+  }
 }

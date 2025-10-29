@@ -110,16 +110,20 @@ export async function POST(request: NextRequest) {
           <title>Your Accessibility Report</title>
         </head>
         <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 10px; text-align: center; margin-bottom: 30px;">
+          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 10px; text-align: center; margin-bottom: 15px;">
             <h1 style="margin: 0; font-size: 28px;">Your Accessibility Report is Ready!</h1>
-            <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">Comprehensive analysis for ${
+          </div>
+          
+          <div style="text-align: center; margin-bottom: 30px;">
+            <p style="margin: 0; font-size: 16px; color: #333;">Comprehensive analysis for</p>
+            <p style="margin: 5px 0 0 0; font-size: 18px; font-weight: 600; color: #000;">${
               scanData.url
             }</p>
           </div>
           
           <div style="background: #f8f9fa; padding: 25px; border-radius: 8px; margin-bottom: 25px;">
-            <h2 style="color: #2c3e50; margin-top: 0;">Scan Summary</h2>
-            <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
+            <h2 style="color: #2c3e50; margin-top: 0; text-align: center;">Scan Summary</h2>
+            <div style="display: flex; justify-content: center; flex-wrap: wrap; gap: 30px;">
               <div style="text-align: center; flex: 1; min-width: 120px;">
                 <div style="font-size: 32px; font-weight: bold; color: ${
                   scanData.score >= 90
@@ -143,6 +147,11 @@ export async function POST(request: NextRequest) {
             </div>
           </div>
           
+          <div style="background: #fff3cd; border: 2px solid #ffc107; padding: 20px; border-radius: 8px; margin-bottom: 25px; text-align: center;">
+            <h2 style="color: #856404; margin-top: 0; margin-bottom: 10px;">📎 Your PDF Report is Attached</h2>
+            <p style="color: #856404; margin: 0; font-size: 14px;">Look for the PDF file attached to this email for your complete accessibility analysis.</p>
+          </div>
+          
           <div style="background: white; border: 1px solid #e1e8ed; padding: 25px; border-radius: 8px; margin-bottom: 25px;">
             <h2 style="color: #2c3e50; margin-top: 0;">What's in Your Report</h2>
             <ul style="padding-left: 20px; color: #555;">
@@ -156,15 +165,17 @@ export async function POST(request: NextRequest) {
           ${
             scanData.score < 90
               ? `
-          <div style="background: #e8f5e8; border-left: 4px solid #27ae60; padding: 20px; margin-bottom: 25px;">
+          <div style="background: #e8f5e8; border-left: 4px solid #27ae60; padding: 20px; margin-bottom: 25px; border-radius: 8px;">
             <h3 style="color: #27ae60; margin-top: 0;">Need Help Fixing These Issues?</h3>
             <p style="margin-bottom: 15px;">Consider using an automated accessibility solution that can resolve many issues instantly:</p>
-            <a href="${
-              process.env.ACCESSIBE_LINK || "https://www.accessibe.com"
-            }" 
-               style="display: inline-block; background: #27ae60; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-              Learn About AccessiBe →
-            </a>
+            <div style="text-align: center;">
+              <a href="${
+                process.env.ACCESSIBE_LINK || "https://www.accessibe.com"
+              }" 
+                 style="display: inline-block; background: #27ae60; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                Learn About AccessiBe →
+              </a>
+            </div>
           </div>
           `
               : ""
