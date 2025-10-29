@@ -339,10 +339,15 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
             Accessibility Scan Results
           </CardTitle>
           <CardDescription className="flex flex-col items-center justify-center gap-2">
-            <div className="flex items-center gap-2">
+            <a
+              href={result.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 hover:underline text-blue-600 dark:text-blue-400"
+            >
               <ExternalLink className="h-4 w-4" />
               {result.url}
-            </div>
+            </a>
             {result.completedAt && (
               <div className="text-xs text-muted-foreground">
                 Last scanned: {new Date(result.completedAt).toLocaleString()}
@@ -446,7 +451,7 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
                   </h3>
                   <div className="space-y-2">
                     {impactViolations
-                      .slice(0, 3)
+                      .slice(0, user ? impactViolations.length : 3)
                       .map((violation: any, index: number) => {
                         const violationKey = `${impact}-${index}`;
                         const isExpanded = expandedViolations.has(violationKey);
@@ -460,6 +465,24 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
                             <div className="text-muted-foreground dark:text-gray-300">
                               {violation.description}
                             </div>
+                            {user && violation.help && (
+                              <div className="text-sm text-muted-foreground dark:text-gray-400 mt-2">
+                                <strong>How to fix:</strong> {violation.help}
+                              </div>
+                            )}
+                            {user && violation.helpUrl && (
+                              <div className="text-sm mt-1">
+                                <a
+                                  href={violation.helpUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1"
+                                >
+                                  Learn more
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                              </div>
+                            )}
                             <button
                               onClick={() =>
                                 toggleViolationExpansion(violationKey)
@@ -476,7 +499,7 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
                             {isExpanded && violation.nodes && (
                               <div className="mt-2 pl-4 border-l-2 border-muted space-y-3">
                                 {violation.nodes
-                                  .slice(0, 5)
+                                  .slice(0, user ? violation.nodes.length : 5)
                                   .map((node: any, nodeIndex: number) => (
                                     <div key={nodeIndex} className="text-xs">
                                       <div className="font-mono text-muted-foreground dark:text-gray-400 bg-muted/50 dark:bg-muted/20 p-2 rounded text-wrap break-all">
@@ -486,9 +509,20 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
                                       </div>
                                       {node.failureSummary && (
                                         <div className="text-muted-foreground dark:text-gray-400 mt-1">
+                                          <strong>Issue:</strong>{" "}
                                           {node.failureSummary}
                                         </div>
                                       )}
+                                      {user &&
+                                        node.target &&
+                                        node.target[0] && (
+                                          <div className="text-muted-foreground dark:text-gray-400 mt-1">
+                                            <strong>Selector:</strong>{" "}
+                                            <code className="text-xs bg-muted/50 dark:bg-muted/20 px-1 py-0.5 rounded">
+                                              {node.target[0]}
+                                            </code>
+                                          </div>
+                                        )}
                                       {node.screenshot && (
                                         <div className="mt-2">
                                           <div className="text-muted-foreground dark:text-gray-400 mb-1">
@@ -504,7 +538,7 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
                                       )}
                                     </div>
                                   ))}
-                                {violation.nodes.length > 5 && (
+                                {!user && violation.nodes.length > 5 && (
                                   <div className="text-xs text-muted-foreground dark:text-gray-400">
                                     +{violation.nodes.length - 5} more elements
                                   </div>
@@ -514,7 +548,7 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
                           </div>
                         );
                       })}
-                    {impactViolations.length > 3 && (
+                    {!user && impactViolations.length > 3 && (
                       <div className="text-sm text-muted-foreground">
                         +{impactViolations.length - 3} more issues
                       </div>

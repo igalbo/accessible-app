@@ -215,16 +215,16 @@ export function ReportTemplate({
                         <p className="text-gray-700 mb-2">
                           {violation.description}
                         </p>
-                        <div className="text-sm text-gray-600">
+                        <div className="text-sm text-gray-600 mb-2">
                           <strong>Elements affected:</strong> {nodeCount}
                         </div>
                         {violation.help && (
-                          <div className="text-sm text-gray-600 mt-2">
+                          <div className="text-sm text-gray-600 mt-2 mb-2">
                             <strong>How to fix:</strong> {violation.help}
                           </div>
                         )}
                         {violation.helpUrl && (
-                          <div className="text-sm text-blue-600 mt-2">
+                          <div className="text-sm text-blue-600 mb-3">
                             <a
                               href={violation.helpUrl}
                               target="_blank"
@@ -232,6 +232,46 @@ export function ReportTemplate({
                             >
                               Learn more →
                             </a>
+                          </div>
+                        )}
+
+                        {/* Detailed element information */}
+                        {violation.nodes && violation.nodes.length > 0 && (
+                          <div className="mt-4 pl-4 border-l-2 border-gray-300 space-y-3">
+                            <div className="text-sm font-semibold text-gray-800 mb-2">
+                              Affected Elements:
+                            </div>
+                            {violation.nodes.map(
+                              (node: any, nodeIndex: number) => (
+                                <div
+                                  key={nodeIndex}
+                                  className="text-xs bg-white p-3 rounded border border-gray-200"
+                                >
+                                  <div className="font-semibold text-gray-700 mb-1">
+                                    Element {nodeIndex + 1}:
+                                  </div>
+                                  <div className="font-mono text-gray-600 bg-gray-50 p-2 rounded break-all mb-2">
+                                    {node.html ||
+                                      node.target?.[0] ||
+                                      "Element location not available"}
+                                  </div>
+                                  {node.failureSummary && (
+                                    <div className="text-gray-700 mt-2">
+                                      <strong>Issue:</strong>{" "}
+                                      {node.failureSummary}
+                                    </div>
+                                  )}
+                                  {node.target && node.target[0] && (
+                                    <div className="text-gray-600 mt-1">
+                                      <strong>Selector:</strong>{" "}
+                                      <code className="text-xs">
+                                        {node.target[0]}
+                                      </code>
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            )}
                           </div>
                         )}
                       </div>
