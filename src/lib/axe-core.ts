@@ -3,7 +3,7 @@
  * This module handles loading and running axe-core for accessibility scanning
  */
 
-import { Page } from "playwright";
+import { Page } from "puppeteer-core";
 import axeCore from "axe-core";
 import { readFileSync } from "fs";
 import { join } from "path";
@@ -93,24 +93,29 @@ async function captureViolationScreenshots(
 
           try {
             // Try to find and screenshot the element
-            const element = await page.locator(node.target[0]).first();
+            const element = await page.$(node.target[0]);
 
-            if (await element.isVisible()) {
-              const screenshotFilename = `${scanId}-${Date.now()}-${Math.random()
-                .toString(36)
-                .substr(2, 9)}.png`;
-              const screenshotPath = join(screenshotDir, screenshotFilename);
+            if (element) {
+              // Check if element is visible
+              const isVisible = await element.isIntersectingViewport();
 
-              // Take screenshot of the element
-              await element.screenshot({ path: screenshotPath });
+              if (isVisible) {
+                const screenshotFilename = `${scanId}-${Date.now()}-${Math.random()
+                  .toString(36)
+                  .substr(2, 9)}.png`;
+                const screenshotPath = join(screenshotDir, screenshotFilename);
 
-              // Mark this element as captured
-              capturedElements.add(elementId);
+                // Take screenshot of the element
+                await element.screenshot({ path: screenshotPath });
 
-              return {
-                ...node,
-                screenshot: `/screenshots/${screenshotFilename}`,
-              };
+                // Mark this element as captured
+                capturedElements.add(elementId);
+
+                return {
+                  ...node,
+                  screenshot: `/screenshots/${screenshotFilename}`,
+                };
+              }
             }
           } catch (error) {
             console.warn(
@@ -134,7 +139,7 @@ async function captureViolationScreenshots(
 }
 
 /**
- * Runs axe-core accessibility checks on a Playwright page
+ * Runs axe-core accessibility checks on a Puppeteer page
  * Uses axe.run() directly - checks version and uses latest if needed
  */
 export async function runAxeOnPage(

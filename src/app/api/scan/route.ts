@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { chromium, Page } from "playwright";
+import puppeteer, { Browser, Page } from "puppeteer-core";
+import chromium from "@sparticuz/chromium";
 import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
 import { runAxeOnPage, calculateAccessibilityScore } from "@/lib/axe-core";
@@ -12,22 +13,22 @@ const scanRequestSchema = z.object({
 
 /**
  * Navigate to a page with fallback strategy to handle timeout issues
- * First tries networkidle, then falls back to domcontentloaded
+ * First tries networkidle0, then falls back to domcontentloaded
  */
 async function navigateWithFallback(page: Page, url: string): Promise<void> {
   console.log(`Attempting to navigate to: ${url}`);
 
   try {
-    // First attempt: networkidle (fastest when it works)
-    console.log("Trying networkidle strategy...");
+    // First attempt: networkidle0 (fastest when it works)
+    console.log("Trying networkidle0 strategy...");
     await page.goto(url, {
-      waitUntil: "networkidle",
+      waitUntil: "networkidle0",
       timeout: 30000,
     });
-    console.log("Successfully loaded with networkidle");
+    console.log("Successfully loaded with networkidle0");
     return;
   } catch {
-    console.log("Networkidle failed, trying domcontentloaded fallback...");
+    console.log("Networkidle0 failed, trying domcontentloaded fallback...");
 
     try {
       // Second attempt: domcontentloaded (more reliable)
@@ -38,7 +39,7 @@ async function navigateWithFallback(page: Page, url: string): Promise<void> {
       console.log("Successfully loaded with domcontentloaded");
 
       // Give a bit more time for dynamic content to load
-      await page.waitForTimeout(2000);
+      await new Promise((resolve) => setTimeout(resolve, 2000));
       return;
     } catch (fallbackError) {
       console.error("Both navigation strategies failed:", fallbackError);
@@ -50,6 +51,66 @@ async function navigateWithFallback(page: Page, url: string): Promise<void> {
         }`
       );
     }
+  }
+}
+
+/**
+ * Launches Puppeteer browser with appropriate configuration for environment
+ */
+async function launchBrowser(): Promise<Browser> {
+  const isProduction = process.env.NODE_ENV === "production";
+
+  if (isProduction) {
+    // Production (Vercel) - use @sparticuz/chromium
+    console.log(
+      "Launching browser in production mode with @sparticuz/chromium"
+    );
+    return await puppeteer.launch({
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath(),
+      headless: chromium.headless,
+    });
+  } else {
+    // Local development - use system Chrome
+    console.log("Launching browser in development mode");
+
+    // Common Chrome/Chromium paths for different operating systems
+    const possiblePaths = [
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", // macOS
+      "/usr/bin/google-chrome", // Linux
+      "/usr/bin/chromium-browser", // Linux alternative
+      "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe", // Windows
+      "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe", // Windows 32-bit
+    ];
+
+    // Try to find Chrome installation
+    let executablePath: string | undefined;
+    for (const path of possiblePaths) {
+      try {
+        const fs = require("fs");
+        if (fs.existsSync(path)) {
+          executablePath = path;
+          break;
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    return await puppeteer.launch({
+      headless: true,
+      executablePath,
+      args: [
+        "--disable-web-security",
+        "--disable-features=VizDisplayCompositor",
+        "--disable-dev-shm-usage",
+        "--no-sandbox",
+        "--disable-background-timer-throttling",
+        "--disable-backgrounding-occluded-windows",
+        "--disable-renderer-backgrounding",
+      ],
+    });
   }
 }
 
@@ -142,28 +203,16 @@ export async function POST(request: NextRequest) {
 }
 
 async function performScan(scanId: string, url: string) {
-  let browser;
+  let browser: Browser | undefined;
 
   try {
-    // Launch browser with disabled web security to bypass CSP restrictions
-    browser = await chromium.launch({
-      headless: true,
-      args: [
-        "--disable-web-security",
-        "--disable-features=VizDisplayCompositor",
-        "--disable-dev-shm-usage",
-        "--no-sandbox",
-        "--disable-background-timer-throttling",
-        "--disable-backgrounding-occluded-windows",
-        "--disable-renderer-backgrounding",
-      ],
-    });
+    // Launch browser with environment-appropriate configuration
+    browser = await launchBrowser();
 
-    const context = await browser.newContext({
-      // Bypass CSP for accessibility scanning
-      bypassCSP: true,
-    });
-    const page = await context.newPage();
+    const page = await browser.newPage();
+
+    // Set bypass CSP for accessibility scanning
+    await page.setBypassCSP(true);
 
     // Navigate to the page with fallback strategy
     await navigateWithFallback(page, url);
