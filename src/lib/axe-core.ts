@@ -175,25 +175,33 @@ export async function runAxeOnPage(
 
   const results = await page.evaluate(() => {
     return new Promise((resolve, reject) => {
-      // @ts-ignore - axe is injected globally
+      // @ts-expect-error - axe is injected globally
       if (typeof axe === "undefined") {
         reject(new Error("axe-core not loaded"));
         return;
       }
 
-      // @ts-ignore - axe is injected globally
-      axe.run((err: any, results: any) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(results);
+      // @ts-expect-error - axe is injected globally
+      axe.run(
+        (
+          err: Error | null,
+          results: { violations: unknown[]; passes: unknown[] }
+        ) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(results);
+          }
         }
-      });
+      );
     });
   });
 
-  let violations = (results as any).violations || [];
-  const passes = (results as any).passes || [];
+  let violations =
+    (results as { violations: AxeViolation[]; passes: AxePass[] }).violations ||
+    [];
+  const passes =
+    (results as { violations: AxeViolation[]; passes: AxePass[] }).passes || [];
 
   // Capture screenshots if enabled via environment variable, scanId is provided, and there are violations
   const screenshotsEnabled = process.env.ENABLE_SCREENSHOTS === "true";

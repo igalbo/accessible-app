@@ -101,7 +101,7 @@ export function EmailCaptureModal({
                 Report Sent!
               </h3>
               <p className="text-gray-600 mb-4">
-                We've sent your detailed accessibility report to{" "}
+                We&apos;ve sent your detailed accessibility report to{" "}
                 <strong>{email}</strong>. Please check your inbox (and spam
                 folder) for the PDF report.
               </p>
@@ -133,7 +133,7 @@ export function EmailCaptureModal({
 
               <div className="bg-blue-50 p-4 rounded-md text-sm text-blue-800">
                 <p className="mb-2">
-                  <strong>What you'll receive:</strong>
+                  <strong>What you&apos;ll receive:</strong>
                 </p>
                 <ul className="space-y-1 text-blue-700">
                   <li>• Complete accessibility audit report (PDF)</li>

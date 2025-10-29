@@ -91,7 +91,8 @@ export async function POST(request: NextRequest) {
     // Calculate summary stats
     const violations = scanData.result_json?.violations || [];
     const totalIssues = violations.reduce(
-      (total: number, violation: any) => total + (violation.nodes?.length || 0),
+      (total: number, violation: { nodes?: unknown[] }) =>
+        total + (violation.nodes?.length || 0),
       0
     );
 

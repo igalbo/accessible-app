@@ -30,7 +30,7 @@ export default function SignupPage() {
         // The auth state listener in Header will handle the UI update
         router.push("/dashboard");
       }
-    } catch (err) {
+    } catch {
       setError("An unexpected error occurred");
     } finally {
       setIsLoading(false);

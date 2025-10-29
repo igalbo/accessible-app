@@ -1,13 +1,33 @@
 import { supabaseAdmin } from "./supabase";
 import { ScanRow, ScanInsert, ScanUpdate } from "./supabase";
 
+interface ViolationNode {
+  html?: string;
+  target?: string[];
+  failureSummary?: string;
+}
+
+interface Violation {
+  id: string;
+  impact?: string;
+  description: string;
+  help?: string;
+  helpUrl?: string;
+  nodes?: ViolationNode[];
+}
+
+interface Pass {
+  id: string;
+  description?: string;
+}
+
 export interface ScanResult {
   id: string;
   url: string;
   status: "pending" | "completed" | "failed";
   score?: number;
-  violations?: any[];
-  passes?: any[];
+  violations?: Violation[];
+  passes?: Pass[];
   createdAt: Date;
   completedAt?: Date;
   error?: string;
@@ -21,8 +41,8 @@ function mapScanRowToResult(row: ScanRow): ScanResult {
     url: row.url,
     status: row.status,
     score: row.score || undefined,
-    violations: row.result_json?.violations,
-    passes: row.result_json?.passes,
+    violations: row.result_json?.violations as Violation[] | undefined,
+    passes: row.result_json?.passes as Pass[] | undefined,
     createdAt: new Date(row.created_at),
     completedAt: row.completed_at ? new Date(row.completed_at) : undefined,
     error: row.error || undefined,

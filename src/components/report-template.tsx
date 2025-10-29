@@ -9,13 +9,33 @@ import {
   TrendingUp,
 } from "lucide-react";
 
+interface ViolationNode {
+  html?: string;
+  target?: string[];
+  failureSummary?: string;
+}
+
+interface Violation {
+  id: string;
+  impact?: string;
+  description: string;
+  help?: string;
+  helpUrl?: string;
+  nodes?: ViolationNode[];
+}
+
+interface Pass {
+  id: string;
+  description?: string;
+}
+
 interface ScanResult {
   id: string;
   url: string;
   status: string;
   score?: number;
-  violations?: any[];
-  passes?: any[];
+  violations?: Violation[];
+  passes?: Pass[];
   createdAt: string;
   completedAt?: string;
   error?: string;
@@ -48,13 +68,13 @@ export function ReportTemplate({
     return <XCircle className="h-12 w-12 text-red-600" />;
   };
 
-  const groupViolationsByImpact = (violations: any[]) => {
+  const groupViolationsByImpact = (violations: Violation[]) => {
     return violations.reduce((acc, violation) => {
       const impact = violation.impact || "minor";
       if (!acc[impact]) acc[impact] = [];
       acc[impact].push(violation);
       return acc;
-    }, {} as Record<string, any[]>);
+    }, {} as Record<string, Violation[]>);
   };
 
   const groupedViolations = groupViolationsByImpact(violations);
@@ -200,83 +220,85 @@ export function ReportTemplate({
                   {impact} Issues ({impactViolations.length})
                 </h3>
                 <div className="space-y-4">
-                  {impactViolations.map((violation: any, index: number) => {
-                    const nodeCount = violation.nodes?.length || 1;
-                    return (
-                      <div
-                        key={index}
-                        className={`border-l-4 p-4 rounded ${
-                          impactColors[impact as keyof typeof impactColors]
-                        }`}
-                      >
-                        <h4 className="font-semibold text-gray-900 mb-2">
-                          {violation.id}
-                        </h4>
-                        <p className="text-gray-700 mb-2">
-                          {violation.description}
-                        </p>
-                        <div className="text-sm text-gray-600 mb-2">
-                          <strong>Elements affected:</strong> {nodeCount}
-                        </div>
-                        {violation.help && (
-                          <div className="text-sm text-gray-600 mt-2 mb-2">
-                            <strong>How to fix:</strong> {violation.help}
+                  {impactViolations.map(
+                    (violation: Violation, index: number) => {
+                      const nodeCount = violation.nodes?.length || 1;
+                      return (
+                        <div
+                          key={index}
+                          className={`border-l-4 p-4 rounded ${
+                            impactColors[impact as keyof typeof impactColors]
+                          }`}
+                        >
+                          <h4 className="font-semibold text-gray-900 mb-2">
+                            {violation.id}
+                          </h4>
+                          <p className="text-gray-700 mb-2">
+                            {violation.description}
+                          </p>
+                          <div className="text-sm text-gray-600 mb-2">
+                            <strong>Elements affected:</strong> {nodeCount}
                           </div>
-                        )}
-                        {violation.helpUrl && (
-                          <div className="text-sm text-blue-600 mb-3">
-                            <a
-                              href={violation.helpUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              Learn more →
-                            </a>
-                          </div>
-                        )}
-
-                        {/* Detailed element information */}
-                        {violation.nodes && violation.nodes.length > 0 && (
-                          <div className="mt-4 pl-4 border-l-2 border-gray-300 space-y-3">
-                            <div className="text-sm font-semibold text-gray-800 mb-2">
-                              Affected Elements:
+                          {violation.help && (
+                            <div className="text-sm text-gray-600 mt-2 mb-2">
+                              <strong>How to fix:</strong> {violation.help}
                             </div>
-                            {violation.nodes.map(
-                              (node: any, nodeIndex: number) => (
-                                <div
-                                  key={nodeIndex}
-                                  className="text-xs bg-white p-3 rounded border border-gray-200"
-                                >
-                                  <div className="font-semibold text-gray-700 mb-1">
-                                    Element {nodeIndex + 1}:
-                                  </div>
-                                  <div className="font-mono text-gray-600 bg-gray-50 p-2 rounded break-all mb-2">
-                                    {node.html ||
-                                      node.target?.[0] ||
-                                      "Element location not available"}
-                                  </div>
-                                  {node.failureSummary && (
-                                    <div className="text-gray-700 mt-2">
-                                      <strong>Issue:</strong>{" "}
-                                      {node.failureSummary}
+                          )}
+                          {violation.helpUrl && (
+                            <div className="text-sm text-blue-600 mb-3">
+                              <a
+                                href={violation.helpUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                Learn more →
+                              </a>
+                            </div>
+                          )}
+
+                          {/* Detailed element information */}
+                          {violation.nodes && violation.nodes.length > 0 && (
+                            <div className="mt-4 pl-4 border-l-2 border-gray-300 space-y-3">
+                              <div className="text-sm font-semibold text-gray-800 mb-2">
+                                Affected Elements:
+                              </div>
+                              {violation.nodes.map(
+                                (node: ViolationNode, nodeIndex: number) => (
+                                  <div
+                                    key={nodeIndex}
+                                    className="text-xs bg-white p-3 rounded border border-gray-200"
+                                  >
+                                    <div className="font-semibold text-gray-700 mb-1">
+                                      Element {nodeIndex + 1}:
                                     </div>
-                                  )}
-                                  {node.target && node.target[0] && (
-                                    <div className="text-gray-600 mt-1">
-                                      <strong>Selector:</strong>{" "}
-                                      <code className="text-xs">
-                                        {node.target[0]}
-                                      </code>
+                                    <div className="font-mono text-gray-600 bg-gray-50 p-2 rounded break-all mb-2">
+                                      {node.html ||
+                                        node.target?.[0] ||
+                                        "Element location not available"}
                                     </div>
-                                  )}
-                                </div>
-                              )
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                                    {node.failureSummary && (
+                                      <div className="text-gray-700 mt-2">
+                                        <strong>Issue:</strong>{" "}
+                                        {node.failureSummary}
+                                      </div>
+                                    )}
+                                    {node.target && node.target[0] && (
+                                      <div className="text-gray-600 mt-1">
+                                        <strong>Selector:</strong>{" "}
+                                        <code className="text-xs">
+                                          {node.target[0]}
+                                        </code>
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+                  )}
                 </div>
               </div>
             );

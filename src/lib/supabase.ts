@@ -27,6 +27,12 @@ export const supabaseAdmin = (() => {
   });
 })();
 
+// Result JSON type
+export interface ScanResultJson {
+  violations?: unknown[];
+  passes?: unknown[];
+}
+
 // Database types
 export interface Database {
   public: {
@@ -38,7 +44,7 @@ export interface Database {
           url: string;
           status: "pending" | "completed" | "failed";
           score: number | null;
-          result_json: any | null;
+          result_json: ScanResultJson | null;
           error: string | null;
           created_at: string;
           completed_at: string | null;
@@ -49,7 +55,7 @@ export interface Database {
           url: string;
           status?: "pending" | "completed" | "failed";
           score?: number | null;
-          result_json?: any | null;
+          result_json?: ScanResultJson | null;
           error?: string | null;
           created_at?: string;
           completed_at?: string | null;
@@ -60,7 +66,7 @@ export interface Database {
           url?: string;
           status?: "pending" | "completed" | "failed";
           score?: number | null;
-          result_json?: any | null;
+          result_json?: ScanResultJson | null;
           error?: string | null;
           created_at?: string;
           completed_at?: string | null;

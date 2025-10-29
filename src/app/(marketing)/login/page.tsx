@@ -30,7 +30,7 @@ export default function LoginPage() {
         // The auth state listener in Header will handle the UI update
         router.push("/dashboard");
       }
-    } catch (err) {
+    } catch {
       setError("An unexpected error occurred");
     } finally {
       setIsLoading(false);
@@ -96,7 +96,7 @@ export default function LoginPage() {
 
       <div className="text-center mt-6">
         <p className="text-sm text-muted-foreground">
-          Don't have an account?{" "}
+          Don&apos;t have an account?{" "}
           <Link
             href="/signup"
             className="text-primary hover:text-primary/80 font-medium"

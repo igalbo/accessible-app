@@ -25,14 +25,36 @@ import {
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { EmailCaptureModal } from "@/components/email-capture-modal";
+import Image from "next/image";
+
+interface ViolationNode {
+  html?: string;
+  target?: string[];
+  failureSummary?: string;
+  screenshot?: string;
+}
+
+interface Violation {
+  id: string;
+  impact?: string;
+  description: string;
+  help?: string;
+  helpUrl?: string;
+  nodes?: ViolationNode[];
+}
+
+interface Pass {
+  id: string;
+  description?: string;
+}
 
 interface ScanResult {
   id: string;
   url: string;
   status: "pending" | "completed" | "failed";
   score?: number;
-  violations?: any[];
-  passes?: any[];
+  violations?: Violation[];
+  passes?: Pass[];
   createdAt: string;
   completedAt?: string;
   error?: string;
@@ -52,7 +74,7 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
   );
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
 
   const toggleViolationExpansion = (violationKey: string) => {
     const newExpanded = new Set(expandedViolations);
@@ -65,8 +87,9 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
   };
 
   useEffect(() => {
-    let pollInterval: NodeJS.Timeout;
     let isSubscribed = true;
+    // eslint-disable-next-line prefer-const
+    let intervalId: NodeJS.Timeout | undefined;
     const supabase = createClient();
 
     // Get user authentication state
@@ -122,8 +145,8 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
           // If completed or failed, stop loading and polling
           if (result.status === "completed" || result.status === "failed") {
             setLoading(false);
-            if (pollInterval) {
-              clearInterval(pollInterval);
+            if (intervalId) {
+              clearInterval(intervalId);
             }
           }
         }
@@ -139,14 +162,15 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
     fetchResult();
 
     // Set up polling as fallback (every 2 seconds)
-    pollInterval = setInterval(() => {
+    intervalId = setInterval(() => {
       if (isSubscribed && loading) {
         fetchResult();
       }
     }, 2000);
 
     // Set up real-time subscription
-    let channel: any = null;
+    let channel: ReturnType<ReturnType<typeof createClient>["channel"]> | null =
+      null;
     try {
       channel = supabase
         .channel(`scan-${scanId}`)
@@ -183,8 +207,8 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
                 updatedScan.status === "failed"
               ) {
                 setLoading(false);
-                if (pollInterval) {
-                  clearInterval(pollInterval);
+                if (intervalId) {
+                  clearInterval(intervalId);
                 }
               }
             }
@@ -202,8 +226,8 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
     return () => {
       isSubscribed = false;
       subscription.unsubscribe();
-      if (pollInterval) {
-        clearInterval(pollInterval);
+      if (intervalId) {
+        clearInterval(intervalId);
       }
       if (channel) {
         try {
@@ -270,13 +294,13 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
     return <XCircle className="h-8 w-8 text-red-600" />;
   };
 
-  const groupViolationsByImpact = (violations: any[]) => {
+  const groupViolationsByImpact = (violations: Violation[]) => {
     return violations.reduce((acc, violation) => {
       const impact = violation.impact || "minor";
       if (!acc[impact]) acc[impact] = [];
       acc[impact].push(violation);
       return acc;
-    }, {} as Record<string, any[]>);
+    }, {} as Record<string, Violation[]>);
   };
 
   if (loading || result?.status === "pending") {
@@ -452,7 +476,7 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
                   <div className="space-y-2">
                     {impactViolations
                       .slice(0, user ? impactViolations.length : 3)
-                      .map((violation: any, index: number) => {
+                      .map((violation: Violation, index: number) => {
                         const violationKey = `${impact}-${index}`;
                         const isExpanded = expandedViolations.has(violationKey);
                         const nodeCount = violation.nodes?.length || 1;
@@ -500,44 +524,59 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
                               <div className="mt-2 pl-4 border-l-2 border-muted space-y-3">
                                 {violation.nodes
                                   .slice(0, user ? violation.nodes.length : 5)
-                                  .map((node: any, nodeIndex: number) => (
-                                    <div key={nodeIndex} className="text-xs">
-                                      <div className="font-mono text-muted-foreground dark:text-gray-400 bg-muted/50 dark:bg-muted/20 p-2 rounded text-wrap break-all">
-                                        {node.html ||
-                                          node.target?.[0] ||
-                                          "Element location not available"}
-                                      </div>
-                                      {node.failureSummary && (
-                                        <div className="text-muted-foreground dark:text-gray-400 mt-1">
-                                          <strong>Issue:</strong>{" "}
-                                          {node.failureSummary}
+                                  .map(
+                                    (
+                                      node: ViolationNode,
+                                      nodeIndex: number
+                                    ) => (
+                                      <div key={nodeIndex} className="text-xs">
+                                        <div className="font-mono text-muted-foreground dark:text-gray-400 bg-muted/50 dark:bg-muted/20 p-2 rounded text-wrap break-all">
+                                          {node.html ||
+                                            node.target?.[0] ||
+                                            "Element location not available"}
                                         </div>
-                                      )}
-                                      {user &&
-                                        node.target &&
-                                        node.target[0] && (
+                                        {node.failureSummary && (
                                           <div className="text-muted-foreground dark:text-gray-400 mt-1">
-                                            <strong>Selector:</strong>{" "}
-                                            <code className="text-xs bg-muted/50 dark:bg-muted/20 px-1 py-0.5 rounded">
-                                              {node.target[0]}
-                                            </code>
+                                            <strong>Issue:</strong>{" "}
+                                            {node.failureSummary}
                                           </div>
                                         )}
-                                      {node.screenshot && (
-                                        <div className="mt-2">
-                                          <div className="text-muted-foreground dark:text-gray-400 mb-1">
-                                            Element Screenshot:
+                                        {user &&
+                                          node.target &&
+                                          node.target[0] && (
+                                            <div className="text-muted-foreground dark:text-gray-400 mt-1">
+                                              <strong>Selector:</strong>{" "}
+                                              <code className="text-xs bg-muted/50 dark:bg-muted/20 px-1 py-0.5 rounded">
+                                                {node.target[0]}
+                                              </code>
+                                            </div>
+                                          )}
+                                        {node.screenshot && (
+                                          <div className="mt-2">
+                                            <div className="text-muted-foreground dark:text-gray-400 mb-1">
+                                              Element Screenshot:
+                                            </div>
+                                            <div
+                                              className="relative max-w-full"
+                                              style={{ maxHeight: "200px" }}
+                                            >
+                                              <Image
+                                                src={node.screenshot}
+                                                alt={`Screenshot of element with ${violation.id} violation`}
+                                                width={800}
+                                                height={200}
+                                                className="max-w-full h-auto border border-muted rounded shadow-sm"
+                                                style={{
+                                                  maxHeight: "200px",
+                                                  width: "auto",
+                                                }}
+                                              />
+                                            </div>
                                           </div>
-                                          <img
-                                            src={node.screenshot}
-                                            alt={`Screenshot of element with ${violation.id} violation`}
-                                            className="max-w-full h-auto border border-muted rounded shadow-sm"
-                                            style={{ maxHeight: "200px" }}
-                                          />
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
+                                        )}
+                                      </div>
+                                    )
+                                  )}
                                 {!user && violation.nodes.length > 5 && (
                                   <button
                                     onClick={() => setIsEmailModalOpen(true)}
