@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import puppeteer, { Browser, Page } from "puppeteer-core";
-import chromium from "@sparticuz/chromium";
 import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
 import { runAxeOnPage, calculateAccessibilityScore } from "@/lib/axe-core";
 import { DatabaseService, ScanResult } from "@/lib/database";
 import { createClient } from "@/utils/supabase/server";
-import { existsSync } from "fs";
+import type { Page } from "puppeteer-core";
 
 const scanRequestSchema = z.object({
   url: z.string().url("Please enter a valid URL"),
@@ -43,55 +41,45 @@ async function navigateWithFallback(page: Page, url: string): Promise<void> {
 
 /**
  * Launches Puppeteer browser with appropriate configuration for environment
+ * Uses dynamic imports as recommended by Vercel
  */
-async function launchBrowser(): Promise<Browser> {
-  const isProduction = process.env.NODE_ENV === "production";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function launchBrowser(): Promise<any> {
+  const isVercel = !!process.env.VERCEL_ENV;
 
-  if (isProduction) {
-    // Production (Vercel) - use @sparticuz/chromium
+  if (isVercel) {
+    // Production (Vercel) - use @sparticuz/chromium with dynamic imports
     console.log(
       "Launching browser in production mode with @sparticuz/chromium"
     );
-    return await puppeteer.launch({
-      args: chromium.args,
+
+    const chromium = (await import("@sparticuz/chromium")).default;
+    const puppeteer = await import("puppeteer-core");
+
+    return await puppeteer.default.launch({
+      args: [
+        ...chromium.args,
+        "--disable-web-security",
+        "--disable-features=IsolateOrigins,site-per-process",
+      ],
       defaultViewport: chromium.defaultViewport,
       executablePath: await chromium.executablePath(),
       headless: chromium.headless,
     });
   } else {
-    // Local development - use system Chrome
+    // Local development - use full puppeteer with dynamic import
     console.log("Launching browser in development mode");
 
-    // Common Chrome/Chromium paths for different operating systems
-    const possiblePaths = [
-      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", // macOS
-      "/usr/bin/google-chrome", // Linux
-      "/usr/bin/chromium-browser", // Linux alternative
-      "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe", // Windows
-      "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe", // Windows 32-bit
-    ];
+    const puppeteer = await import("puppeteer");
 
-    // Try to find Chrome installation
-    let executablePath: string | undefined;
-    for (const path of possiblePaths) {
-      try {
-        if (existsSync(path)) {
-          executablePath = path;
-          break;
-        }
-      } catch {
-        continue;
-      }
-    }
-
-    return await puppeteer.launch({
+    return await puppeteer.default.launch({
       headless: true,
-      executablePath,
       args: [
         "--disable-web-security",
         "--disable-features=VizDisplayCompositor",
         "--disable-dev-shm-usage",
         "--no-sandbox",
+        "--disable-setuid-sandbox",
         "--disable-background-timer-throttling",
         "--disable-backgrounding-occluded-windows",
         "--disable-renderer-backgrounding",
@@ -189,7 +177,8 @@ export async function POST(request: NextRequest) {
 }
 
 async function performScan(scanId: string, url: string) {
-  let browser: Browser | undefined;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let browser: any;
 
   try {
     // Launch browser with environment-appropriate configuration

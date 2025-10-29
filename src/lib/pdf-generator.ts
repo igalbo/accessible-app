@@ -1,7 +1,3 @@
-import puppeteer, { Browser } from "puppeteer-core";
-import chromium from "@sparticuz/chromium";
-import { existsSync } from "fs";
-
 export interface PDFGenerationOptions {
   scanId: string;
   baseUrl?: string;
@@ -9,50 +5,35 @@ export interface PDFGenerationOptions {
 
 /**
  * Launches Puppeteer browser with appropriate configuration for environment
+ * Uses dynamic imports as recommended by Vercel
  */
-async function launchBrowser(): Promise<Browser> {
-  const isProduction = process.env.NODE_ENV === "production";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function launchBrowser(): Promise<any> {
+  const isVercel = !!process.env.VERCEL_ENV;
 
-  if (isProduction) {
-    // Production (Vercel) - use @sparticuz/chromium
+  if (isVercel) {
+    // Production (Vercel) - use @sparticuz/chromium with dynamic imports
     console.log(
       "[PDF Generator] Launching browser in production mode with @sparticuz/chromium"
     );
-    return await puppeteer.launch({
+
+    const chromium = (await import("@sparticuz/chromium")).default;
+    const puppeteer = await import("puppeteer-core");
+
+    return await puppeteer.default.launch({
       args: chromium.args,
       defaultViewport: chromium.defaultViewport,
       executablePath: await chromium.executablePath(),
       headless: chromium.headless,
     });
   } else {
-    // Local development - use system Chrome
+    // Local development - use full puppeteer with dynamic import
     console.log("[PDF Generator] Launching browser in development mode");
 
-    // Common Chrome/Chromium paths for different operating systems
-    const possiblePaths = [
-      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", // macOS
-      "/usr/bin/google-chrome", // Linux
-      "/usr/bin/chromium-browser", // Linux alternative
-      "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe", // Windows
-      "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe", // Windows 32-bit
-    ];
+    const puppeteer = await import("puppeteer");
 
-    // Try to find Chrome installation
-    let executablePath: string | undefined;
-    for (const path of possiblePaths) {
-      try {
-        if (existsSync(path)) {
-          executablePath = path;
-          break;
-        }
-      } catch {
-        continue;
-      }
-    }
-
-    return await puppeteer.launch({
+    return await puppeteer.default.launch({
       headless: true,
-      executablePath,
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
     });
   }
