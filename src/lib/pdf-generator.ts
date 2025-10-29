@@ -1,8 +1,61 @@
-import { chromium } from "playwright";
+import puppeteer, { Browser } from "puppeteer-core";
+import chromium from "@sparticuz/chromium";
+import { existsSync } from "fs";
 
 export interface PDFGenerationOptions {
   scanId: string;
   baseUrl?: string;
+}
+
+/**
+ * Launches Puppeteer browser with appropriate configuration for environment
+ */
+async function launchBrowser(): Promise<Browser> {
+  const isProduction = process.env.NODE_ENV === "production";
+
+  if (isProduction) {
+    // Production (Vercel) - use @sparticuz/chromium
+    console.log(
+      "[PDF Generator] Launching browser in production mode with @sparticuz/chromium"
+    );
+    return await puppeteer.launch({
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath(),
+      headless: chromium.headless,
+    });
+  } else {
+    // Local development - use system Chrome
+    console.log("[PDF Generator] Launching browser in development mode");
+
+    // Common Chrome/Chromium paths for different operating systems
+    const possiblePaths = [
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", // macOS
+      "/usr/bin/google-chrome", // Linux
+      "/usr/bin/chromium-browser", // Linux alternative
+      "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe", // Windows
+      "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe", // Windows 32-bit
+    ];
+
+    // Try to find Chrome installation
+    let executablePath: string | undefined;
+    for (const path of possiblePaths) {
+      try {
+        if (existsSync(path)) {
+          executablePath = path;
+          break;
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    return await puppeteer.launch({
+      headless: true,
+      executablePath,
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    });
+  }
 }
 
 export async function generatePDF({
@@ -14,9 +67,8 @@ export async function generatePDF({
       "NEXT_PUBLIC_BASE_URL environment variable is required for PDF generation"
     );
   }
-  const browser = await chromium.launch({
-    headless: true,
-  });
+
+  const browser = await launchBrowser();
 
   try {
     const page = await browser.newPage();
@@ -26,7 +78,7 @@ export async function generatePDF({
     console.log(`[PDF Generator] Navigating to: ${reportUrl}`);
 
     const response = await page.goto(reportUrl, {
-      waitUntil: "networkidle",
+      waitUntil: "networkidle0",
       timeout: 30000,
     });
 
@@ -40,7 +92,7 @@ export async function generatePDF({
     console.log(`[PDF Generator] Found content, generating PDF...`);
 
     // Wait a bit more for any dynamic content to load
-    await page.waitForTimeout(2000);
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     // Generate PDF with optimized settings
     const pdfBuffer = await page.pdf({

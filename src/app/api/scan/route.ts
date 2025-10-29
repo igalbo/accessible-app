@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from "uuid";
 import { runAxeOnPage, calculateAccessibilityScore } from "@/lib/axe-core";
 import { DatabaseService, ScanResult } from "@/lib/database";
 import { createClient } from "@/utils/supabase/server";
+import { existsSync } from "fs";
 
 const scanRequestSchema = z.object({
   url: z.string().url("Please enter a valid URL"),
@@ -88,8 +89,7 @@ async function launchBrowser(): Promise<Browser> {
     let executablePath: string | undefined;
     for (const path of possiblePaths) {
       try {
-        const fs = require("fs");
-        if (fs.existsSync(path)) {
+        if (existsSync(path)) {
           executablePath = path;
           break;
         }
