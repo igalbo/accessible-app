@@ -129,7 +129,7 @@ else
     --auth-type NONE \
     --cors '{
       "AllowOrigins": ["*"],
-      "AllowMethods": ["POST"],
+      "AllowMethods": ["POST", "OPTIONS"],
       "AllowHeaders": ["content-type"],
       "MaxAge": 86400
     }' \

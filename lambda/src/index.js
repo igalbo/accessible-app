@@ -8,6 +8,21 @@ const { scanUrl } = require('./scanner');
 exports.handler = async (event) => {
   console.log('Lambda invoked with event:', JSON.stringify(event));
 
+  // Handle OPTIONS request for CORS preflight
+  if (event.httpMethod === 'OPTIONS' || event.requestContext?.http?.method === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Max-Age': '86400',
+      },
+      body: '',
+    };
+  }
+
   try {
     // Parse request body
     let body;
