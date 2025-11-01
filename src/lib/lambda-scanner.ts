@@ -3,11 +3,13 @@
  * Calls the Lambda function for axe-core scanning
  */
 
+import { AxeViolation, AxePass } from "./axe-core";
+
 export interface LambdaScanResults {
   success: boolean;
   url: string;
-  violations: any[];
-  passes: any[];
+  violations: AxeViolation[];
+  passes: AxePass[];
   timestamp: string;
   error?: string;
 }
