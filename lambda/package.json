@@ -1,0 +1,14 @@
+{
+  "name": "axe-scanner-lambda",
+  "version": "1.0.0",
+  "description": "AWS Lambda function for axe-core accessibility scanning",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node src/index.js"
+  },
+  "dependencies": {
+    "@axe-core/puppeteer": "^4.10.3",
+    "@sparticuz/chromium": "^131.0.0",
+    "puppeteer-core": "^23.11.1"
+  }
+}

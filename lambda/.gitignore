@@ -1,0 +1,5 @@
+node_modules/
+function.zip
+trust-policy.json
+*.log
+.DS_Store
