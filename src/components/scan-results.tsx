@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { EmailCaptureModal } from "@/components/email-capture-modal";
+import { scanWithLambdaClient } from "@/lib/lambda-scanner-client";
 import Image from "next/image";
 
 interface ViolationNode {
@@ -86,6 +87,40 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
     setExpandedViolations(newExpanded);
   };
 
+  // Perform Lambda scan and save results
+  const performLambdaScan = async (scanId: string, url: string) => {
+    try {
+      console.log(`[Client] Starting Lambda scan for ${url}`);
+
+      // Call Lambda directly from client
+      const { violations, passes } = await scanWithLambdaClient(url);
+
+      console.log(`[Client] Lambda scan completed, saving results...`);
+
+      // Save results to database via API
+      const response = await fetch("/api/scan/save-results", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          scanId,
+          violations,
+          passes,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to save scan results");
+      }
+
+      console.log(`[Client] Scan results saved successfully`);
+    } catch (error) {
+      console.error("[Client] Lambda scan error:", error);
+      // The error will be reflected in the database update
+    }
+  };
+
   useEffect(() => {
     let isSubscribed = true;
     // eslint-disable-next-line prefer-const
@@ -141,6 +176,11 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
           };
 
           setResult(result);
+
+          // If pending and we haven't started scanning yet, start Lambda scan
+          if (result.status === "pending" && isSubscribed) {
+            performLambdaScan(result.id, result.url);
+          }
 
           // If completed or failed, stop loading and polling
           if (result.status === "completed" || result.status === "failed") {

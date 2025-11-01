@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
-import { scanWithLambda } from "@/lib/lambda-scanner";
-import { calculateAccessibilityScore } from "@/lib/axe-core";
 import { DatabaseService, ScanResult } from "@/lib/database";
 import { createClient } from "@/utils/supabase/server";
 
@@ -70,13 +68,11 @@ export async function POST(request: NextRequest) {
     // Save initial scan result to database
     await DatabaseService.createScan(scanResult);
 
-    // Start scanning in background (don't await)
-    performPageSpeedScan(scanId, url).catch(console.error);
-
+    // Return scan ID - frontend will call Lambda directly
     return NextResponse.json({
       scanId,
       status: "pending",
-      message: "Scan initiated successfully",
+      message: "Scan record created - frontend will perform scan",
       cached: false,
     });
   } catch (error) {
@@ -93,39 +89,5 @@ export async function POST(request: NextRequest) {
       { error: "Failed to initiate scan" },
       { status: 500 }
     );
-  }
-}
-
-async function performPageSpeedScan(scanId: string, url: string) {
-  try {
-    console.log(`[Lambda Scan] Starting scan for ${url}`);
-
-    // Use Lambda scanner
-    const { violations, passes } = await scanWithLambda(url);
-
-    // Calculate score using existing algorithm
-    const score = calculateAccessibilityScore(violations, passes);
-
-    console.log(
-      `[Lambda Scan] Completed: ${violations.length} violations, score: ${score}`
-    );
-
-    // Update scan result
-    await DatabaseService.updateScan(scanId, {
-      status: "completed",
-      score,
-      violations,
-      passes,
-      completedAt: new Date(),
-    });
-  } catch (error) {
-    console.error("[Lambda Scan] Error:", error);
-
-    // Save error result
-    await DatabaseService.updateScan(scanId, {
-      status: "failed",
-      completedAt: new Date(),
-      error: error instanceof Error ? error.message : "Unknown error occurred",
-    });
   }
 }
