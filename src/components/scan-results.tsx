@@ -25,7 +25,6 @@ import {
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { EmailCaptureModal } from "@/components/email-capture-modal";
-import { scanWithLambdaClient } from "@/lib/lambda-scanner-client";
 import Image from "next/image";
 
 interface ViolationNode {
@@ -87,44 +86,7 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
     setExpandedViolations(newExpanded);
   };
 
-  // Perform Lambda scan and save results
-  const performLambdaScan = async (scanId: string, url: string) => {
-    try {
-      console.log(`[Client] Starting Lambda scan for ${url}`);
-
-      // Call Lambda directly from client
-      const { violations, passes } = await scanWithLambdaClient(url);
-
-      console.log(`[Client] Lambda scan completed, saving results...`);
-
-      // Save results to database via API
-      const response = await fetch("/api/scan/save-results", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          scanId,
-          violations,
-          passes,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to save scan results");
-      }
-
-      console.log(`[Client] Scan results saved successfully`);
-    } catch (error) {
-      console.error("[Client] Lambda scan error:", error);
-      // The error will be reflected in the database update
-    }
-  };
-
   useEffect(() => {
-    let isSubscribed = true;
-    // eslint-disable-next-line prefer-const
-    let intervalId: NodeJS.Timeout | undefined;
     const supabase = createClient();
 
     // Get user authentication state
@@ -144,9 +106,10 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
       setUser(session?.user ?? null);
     });
 
-    const fetchResult = async () => {
+    // Fetch scan from database
+    const fetchScan = async () => {
       try {
-        const { data: scanData, error } = await supabase
+        const { data: scanData, error: fetchError } = await supabase
           .from("scans")
           .select(
             "id, url, status, score, result_json, created_at, completed_at, error"
@@ -154,130 +117,83 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
           .eq("id", scanId)
           .single();
 
-        if (error) {
-          if (error.code === "PGRST116") {
+        if (fetchError) {
+          if (fetchError.code === "PGRST116") {
             throw new Error("Scan not found");
           }
-          throw new Error(error.message || "Failed to fetch scan result");
+          throw new Error(fetchError.message || "Failed to fetch scan result");
         }
 
-        if (isSubscribed) {
-          // Convert database row to our expected format
-          const result = {
-            id: scanData.id,
-            url: scanData.url,
-            status: scanData.status,
-            score: scanData.score,
-            violations: scanData.result_json?.violations,
-            passes: scanData.result_json?.passes,
-            createdAt: scanData.created_at,
-            completedAt: scanData.completed_at,
-            error: scanData.error,
-          };
+        const scanResult: ScanResult = {
+          id: scanData.id,
+          url: scanData.url,
+          status: scanData.status,
+          score: scanData.score,
+          violations: scanData.result_json?.violations,
+          passes: scanData.result_json?.passes,
+          createdAt: scanData.created_at,
+          completedAt: scanData.completed_at,
+          error: scanData.error,
+        };
 
-          setResult(result);
+        setResult(scanResult);
 
-          // If pending and we haven't started scanning yet, start Lambda scan
-          if (result.status === "pending" && isSubscribed) {
-            performLambdaScan(result.id, result.url);
+        // If scan is complete or failed, stop polling
+        if (scanResult.status !== "pending") {
+          setLoading(false);
+          if (pollInterval) {
+            clearInterval(pollInterval);
           }
+        }
 
-          // If completed or failed, stop loading and polling
-          if (result.status === "completed" || result.status === "failed") {
-            setLoading(false);
-            if (intervalId) {
-              clearInterval(intervalId);
-            }
+        // Check if scan is stale (older than 2 minutes and still pending)
+        const scanAge = Date.now() - new Date(scanResult.createdAt).getTime();
+        if (scanResult.status === "pending" && scanAge > 120000) {
+          setError("Scan appears to be stuck. Please try again.");
+          setLoading(false);
+          if (pollInterval) {
+            clearInterval(pollInterval);
           }
         }
       } catch (err) {
-        if (isSubscribed) {
-          setError(err instanceof Error ? err.message : "An error occurred");
-          setLoading(false);
+        console.error("[Client] Fetch error:", err);
+        setError(err instanceof Error ? err.message : "An error occurred");
+        setLoading(false);
+        if (pollInterval) {
+          clearInterval(pollInterval);
         }
       }
     };
 
     // Initial fetch
-    fetchResult();
+    fetchScan();
 
-    // Set up polling as fallback (every 2 seconds)
-    intervalId = setInterval(() => {
-      if (isSubscribed && loading) {
-        fetchResult();
+    // Poll every 2 seconds while loading, max 60 times (2 minutes)
+    let pollCount = 0;
+    const maxPolls = 60;
+    const pollInterval: NodeJS.Timeout | null = setInterval(() => {
+      pollCount++;
+
+      if (pollCount >= maxPolls) {
+        setError("Scan timed out. Please try again.");
+        setLoading(false);
+        if (pollInterval) {
+          clearInterval(pollInterval);
+        }
+        return;
       }
+
+      fetchScan();
     }, 2000);
-
-    // Set up real-time subscription
-    let channel: ReturnType<ReturnType<typeof createClient>["channel"]> | null =
-      null;
-    try {
-      channel = supabase
-        .channel(`scan-${scanId}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "UPDATE",
-            schema: "public",
-            table: "scans",
-            filter: `id=eq.${scanId}`,
-          },
-          (payload) => {
-            console.log("Real-time scan update:", payload);
-
-            if (isSubscribed) {
-              // Convert the database row to our expected format
-              const updatedScan = {
-                id: payload.new.id,
-                url: payload.new.url,
-                status: payload.new.status,
-                score: payload.new.score,
-                violations: payload.new.result_json?.violations,
-                passes: payload.new.result_json?.passes,
-                createdAt: payload.new.created_at,
-                completedAt: payload.new.completed_at,
-                error: payload.new.error,
-              };
-
-              setResult(updatedScan);
-
-              // Stop loading when scan is complete
-              if (
-                updatedScan.status === "completed" ||
-                updatedScan.status === "failed"
-              ) {
-                setLoading(false);
-                if (intervalId) {
-                  clearInterval(intervalId);
-                }
-              }
-            }
-          }
-        )
-        .subscribe();
-    } catch (realtimeError) {
-      console.warn(
-        "Real-time subscription failed, using polling only:",
-        realtimeError
-      );
-    }
 
     // Cleanup function
     return () => {
-      isSubscribed = false;
       subscription.unsubscribe();
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
-      if (channel) {
-        try {
-          supabase.removeChannel(channel);
-        } catch (error) {
-          console.warn("Error removing channel:", error);
-        }
+      if (pollInterval) {
+        clearInterval(pollInterval);
       }
     };
-  }, [scanId, loading]);
+  }, [scanId]);
 
   const handleDownloadReport = async () => {
     if (!result) return;

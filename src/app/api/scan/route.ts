@@ -68,11 +68,34 @@ export async function POST(request: NextRequest) {
     // Save initial scan result to database
     await DatabaseService.createScan(scanResult);
 
-    // Return scan ID - frontend will call Lambda directly
+    // Trigger Lambda scan (fire-and-forget - don't await)
+    const lambdaUrl = process.env.LAMBDA_SCANNER_URL;
+    if (lambdaUrl) {
+      fetch(lambdaUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          url,
+          scanId,
+          callbackUrl: `${
+            process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+          }/api/scan/save-results`,
+        }),
+      }).catch((error) => {
+        console.error("Failed to trigger Lambda scan:", error);
+        // Don't throw - scan is in DB as pending, Lambda will update it
+      });
+    } else {
+      console.warn("LAMBDA_SCANNER_URL not configured");
+    }
+
+    // Return scan ID immediately
     return NextResponse.json({
       scanId,
       status: "pending",
-      message: "Scan record created - frontend will perform scan",
+      message: "Scan initiated",
       cached: false,
     });
   } catch (error) {

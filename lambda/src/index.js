@@ -9,15 +9,12 @@ exports.handler = async (event) => {
   console.log('Lambda invoked with event:', JSON.stringify(event));
 
   // Handle OPTIONS request for CORS preflight
+  // Note: Lambda Function URL CORS configuration handles CORS headers automatically
   if (event.httpMethod === 'OPTIONS' || event.requestContext?.http?.method === 'OPTIONS') {
     return {
       statusCode: 200,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Max-Age': '86400',
       },
       body: '',
     };
@@ -32,7 +29,7 @@ exports.handler = async (event) => {
       body = event;
     }
 
-    const { url } = body;
+    const { url, scanId, callbackUrl } = body;
 
     // Validate URL
     if (!url) {
@@ -40,7 +37,6 @@ exports.handler = async (event) => {
         statusCode: 400,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
         },
         body: JSON.stringify({
           success: false,
@@ -57,7 +53,6 @@ exports.handler = async (event) => {
         statusCode: 400,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
         },
         body: JSON.stringify({
           success: false,
@@ -69,12 +64,31 @@ exports.handler = async (event) => {
     // Run scan
     const results = await scanUrl(url);
 
+    // If callback URL provided, send results back
+    if (callbackUrl && scanId) {
+      try {
+        await fetch(callbackUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            scanId,
+            violations: results.violations,
+            passes: results.passes,
+          }),
+        });
+        console.log('Results sent to callback URL');
+      } catch (callbackError) {
+        console.error('Failed to send results to callback:', callbackError);
+      }
+    }
+
     // Return results
     return {
       statusCode: 200,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
       },
       body: JSON.stringify(results),
     };
@@ -82,11 +96,30 @@ exports.handler = async (event) => {
   } catch (error) {
     console.error('Lambda error:', error);
 
+    // If callback URL provided, notify about failure
+    if (callbackUrl && scanId) {
+      try {
+        await fetch(callbackUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            scanId,
+            status: 'failed',
+            error: error.message || 'Scan failed',
+          }),
+        });
+        console.log('Failure sent to callback URL');
+      } catch (callbackError) {
+        console.error('Failed to send failure to callback:', callbackError);
+      }
+    }
+
     return {
       statusCode: 500,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
       },
       body: JSON.stringify({
         success: false,

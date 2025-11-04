@@ -118,18 +118,27 @@ else
     --region $REGION
 fi
 
-echo -e "${YELLOW}Step 7: Creating Function URL...${NC}"
+echo -e "${YELLOW}Step 7: Creating/Updating Function URL...${NC}"
 # Create or update function URL configuration
 if aws lambda get-function-url-config --function-name $FUNCTION_NAME --region $REGION 2>/dev/null; then
-  echo "Function URL already exists"
+  echo "Function URL exists, updating CORS configuration..."
+  aws lambda update-function-url-config \
+    --function-name $FUNCTION_NAME \
+    --cors '{
+      "AllowOrigins": ["https://accessible.app", "https://www.accessible.app", "http://localhost:3000"],
+      "AllowMethods": ["POST"],
+      "AllowHeaders": ["content-type"],
+      "MaxAge": 86400
+    }' \
+    --region $REGION
 else
   echo "Creating Function URL..."
   aws lambda create-function-url-config \
     --function-name $FUNCTION_NAME \
     --auth-type NONE \
     --cors '{
-      "AllowOrigins": ["*"],
-      "AllowMethods": ["POST", "OPTIONS"],
+      "AllowOrigins": ["https://accessible.app", "https://www.accessible.app", "http://localhost:3000"],
+      "AllowMethods": ["POST"],
       "AllowHeaders": ["content-type"],
       "MaxAge": 86400
     }' \

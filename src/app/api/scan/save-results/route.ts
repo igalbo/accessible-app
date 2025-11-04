@@ -5,16 +5,40 @@ import { DatabaseService } from "@/lib/database";
 
 const saveResultsSchema = z.object({
   scanId: z.string().uuid(),
-  violations: z.array(z.any()),
-  passes: z.array(z.any()),
+  status: z.enum(["completed", "failed"]).optional(),
+  violations: z.array(z.any()).optional(),
+  passes: z.array(z.any()).optional(),
+  error: z.string().optional(),
 });
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { scanId, violations, passes } = saveResultsSchema.parse(body);
+    const { scanId, status, violations, passes, error } =
+      saveResultsSchema.parse(body);
 
     console.log(`[Save Results] Saving scan results for ${scanId}`);
+
+    // If status is explicitly failed, update with error
+    if (status === "failed") {
+      await DatabaseService.updateScan(scanId, {
+        status: "failed",
+        error: error || "Scan failed",
+        completedAt: new Date(),
+      });
+
+      console.log(`[Save Results] Marked scan as failed: ${error}`);
+
+      return NextResponse.json({
+        success: true,
+        status: "failed",
+      });
+    }
+
+    // Otherwise, process as successful scan
+    if (!violations || !passes) {
+      throw new Error("Violations and passes are required for completed scans");
+    }
 
     // Calculate score
     const score = calculateAccessibilityScore(violations, passes);
@@ -35,6 +59,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       score,
+      status: "completed",
     });
   } catch (error) {
     console.error("[Save Results] Error:", error);

@@ -2,7 +2,7 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Create custom types
-CREATE TYPE scan_status AS ENUM ('pending', 'completed', 'failed');
+CREATE TYPE scan_status AS ENUM ('pending', 'scanning', 'completed', 'failed');
 
 -- Create scans table
 CREATE TABLE scans (
