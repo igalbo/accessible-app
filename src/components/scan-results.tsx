@@ -245,7 +245,7 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
         realtimeChannel.unsubscribe();
       }
     };
-  }, [scanId, result?.status]);
+  }, [scanId, result]);
 
   const handleDownloadReport = async () => {
     if (!result) return;
