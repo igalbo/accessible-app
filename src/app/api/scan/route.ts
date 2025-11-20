@@ -69,6 +69,7 @@ export async function POST(request: NextRequest) {
     await DatabaseService.createScan(scanResult);
 
     // Trigger Lambda scan (fire-and-forget - don't await)
+    // Lambda will write results directly to the database
     const lambdaUrl = process.env.LAMBDA_SCANNER_URL;
     if (lambdaUrl) {
       fetch(lambdaUrl, {
@@ -79,9 +80,6 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           url,
           scanId,
-          callbackUrl: `${
-            process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
-          }/api/scan/save-results`,
         }),
       }).catch((error) => {
         console.error("Failed to trigger Lambda scan:", error);

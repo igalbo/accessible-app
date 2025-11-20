@@ -1,9 +1,10 @@
 /**
  * AWS Lambda handler for axe-core scanning
- * Receives URL via API Gateway, returns scan results
+ * Receives URL via API Gateway, writes results directly to database
  */
 
 const { scanUrl } = require('./scanner');
+const { updateScanResults, updateScanError } = require('./utils');
 
 exports.handler = async (event) => {
   console.log('Lambda invoked with event:', JSON.stringify(event));
@@ -29,7 +30,7 @@ exports.handler = async (event) => {
       body = event;
     }
 
-    const { url, scanId, callbackUrl } = body;
+    const { url, scanId } = body;
 
     // Validate URL
     if (!url) {
@@ -64,23 +65,14 @@ exports.handler = async (event) => {
     // Run scan
     const results = await scanUrl(url);
 
-    // If callback URL provided, send results back
-    if (callbackUrl && scanId) {
+    // If scanId provided, write results directly to database
+    if (scanId) {
       try {
-        await fetch(callbackUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            scanId,
-            violations: results.violations,
-            passes: results.passes,
-          }),
-        });
-        console.log('Results sent to callback URL');
-      } catch (callbackError) {
-        console.error('Failed to send results to callback:', callbackError);
+        await updateScanResults(scanId, results.violations, results.passes);
+        console.log('Results written to database');
+      } catch (dbError) {
+        console.error('Failed to write results to database:', dbError);
+        // Don't fail the request, still return results
       }
     }
 
@@ -96,24 +88,22 @@ exports.handler = async (event) => {
   } catch (error) {
     console.error('Lambda error:', error);
 
-    // If callback URL provided, notify about failure
-    if (callbackUrl && scanId) {
-      try {
-        await fetch(callbackUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            scanId,
-            status: 'failed',
-            error: error.message || 'Scan failed',
-          }),
-        });
-        console.log('Failure sent to callback URL');
-      } catch (callbackError) {
-        console.error('Failed to send failure to callback:', callbackError);
+    // Try to write error to database if we have scanId from body
+    try {
+      let body;
+      if (event.body) {
+        body = typeof event.body === 'string' ? JSON.parse(event.body) : event.body;
+      } else {
+        body = event;
       }
+      
+      const { scanId } = body;
+      if (scanId) {
+        await updateScanError(scanId, error.message || 'Scan failed');
+        console.log('Error written to database');
+      }
+    } catch (dbError) {
+      console.error('Failed to write error to database:', dbError);
     }
 
     return {

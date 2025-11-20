@@ -88,6 +88,8 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
 
   useEffect(() => {
     const supabase = createClient();
+    let pollInterval: NodeJS.Timeout | null = null;
+    let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
 
     // Get user authentication state
     const getUser = async () => {
@@ -101,7 +103,7 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
 
     // Listen for auth changes
     const {
-      data: { subscription },
+      data: { subscription: authSubscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
     });
@@ -138,11 +140,16 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
 
         setResult(scanResult);
 
-        // If scan is complete or failed, stop polling
+        // If scan is complete or failed, stop polling and unsubscribe
         if (scanResult.status !== "pending") {
           setLoading(false);
           if (pollInterval) {
             clearInterval(pollInterval);
+            pollInterval = null;
+          }
+          if (realtimeChannel) {
+            realtimeChannel.unsubscribe();
+            realtimeChannel = null;
           }
         }
 
@@ -153,6 +160,11 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
           setLoading(false);
           if (pollInterval) {
             clearInterval(pollInterval);
+            pollInterval = null;
+          }
+          if (realtimeChannel) {
+            realtimeChannel.unsubscribe();
+            realtimeChannel = null;
           }
         }
       } catch (err) {
@@ -161,6 +173,11 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
         setLoading(false);
         if (pollInterval) {
           clearInterval(pollInterval);
+          pollInterval = null;
+        }
+        if (realtimeChannel) {
+          realtimeChannel.unsubscribe();
+          realtimeChannel = null;
         }
       }
     };
@@ -168,10 +185,32 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
     // Initial fetch
     fetchScan();
 
-    // Poll every 2 seconds while loading, max 60 times (2 minutes)
+    // Set up Supabase Realtime subscription for instant updates
+    realtimeChannel = supabase
+      .channel(`scan:${scanId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "scans",
+          filter: `id=eq.${scanId}`,
+        },
+        (payload) => {
+          console.log("[Realtime] Scan updated:", payload);
+          // Refetch to get the updated data
+          fetchScan();
+        }
+      )
+      .subscribe((status) => {
+        console.log("[Realtime] Subscription status:", status);
+      });
+
+    // Fallback: Poll every 3 seconds while loading, max 40 times (2 minutes)
+    // This serves as a backup in case Realtime doesn't work
     let pollCount = 0;
-    const maxPolls = 60;
-    const pollInterval: NodeJS.Timeout | null = setInterval(() => {
+    const maxPolls = 40;
+    pollInterval = setInterval(() => {
       pollCount++;
 
       if (pollCount >= maxPolls) {
@@ -179,21 +218,34 @@ export function ScanResults({ scanId, onNewScan }: ScanResultsProps) {
         setLoading(false);
         if (pollInterval) {
           clearInterval(pollInterval);
+          pollInterval = null;
         }
         return;
       }
 
-      fetchScan();
-    }, 2000);
+      // Only poll if still pending
+      if (result?.status === "pending" || !result) {
+        fetchScan();
+      } else {
+        // Stop polling if scan is complete
+        if (pollInterval) {
+          clearInterval(pollInterval);
+          pollInterval = null;
+        }
+      }
+    }, 3000);
 
     // Cleanup function
     return () => {
-      subscription.unsubscribe();
+      authSubscription.unsubscribe();
       if (pollInterval) {
         clearInterval(pollInterval);
       }
+      if (realtimeChannel) {
+        realtimeChannel.unsubscribe();
+      }
     };
-  }, [scanId]);
+  }, [scanId, result?.status]);
 
   const handleDownloadReport = async () => {
     if (!result) return;
